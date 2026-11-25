@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTypingStore } from '../store/useTypingStore';
-import { Trophy, Zap, Target, Activity, RotateCcw, ArrowRight } from 'lucide-react';
+import { Trophy, Zap, Target, Activity, RotateCcw, ArrowRight, UserPlus, Cloud } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts';
 
 interface TestResultModalProps {
@@ -9,8 +9,21 @@ interface TestResultModalProps {
 }
 
 export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNextTest }) => {
-  const { wpm, rawWpm, accuracy, consistency, charsCorrect, charsWrong, charsExtra, wpmSeries, testHistory } = useTypingStore();
+  const {
+    wpm,
+    rawWpm,
+    accuracy,
+    consistency,
+    charsCorrect,
+    charsWrong,
+    charsExtra,
+    wpmSeries,
+    testHistory,
+    profile,
+    setIsAuthModalOpen,
+  } = useTypingStore();
   const latestResult = testHistory[0];
+  const isGuest = profile.id === 'guest' || !!profile.isGuest;
 
   const chartData = wpmSeries.map((val, idx) => ({ second: idx + 1, wpm: val }));
 
@@ -80,6 +93,34 @@ export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNex
               </LineChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      )}
+
+      {/* Guest CTA: save progress */}
+      {isGuest && (
+        <div className="mb-6 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-neutral-900 dark:text-white">
+                Guarda tu progreso creando una cuenta
+              </div>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
+                Como invitado, este resultado solo está en este navegador. Regístrate con email y
+                contraseña para sincronizar historial, XP y logros en la nube.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold text-xs flex items-center gap-2 shadow-md shadow-amber-500/20"
+          >
+            <UserPlus className="w-4 h-4" />
+            Crear cuenta / Entrar
+          </button>
         </div>
       )}
 

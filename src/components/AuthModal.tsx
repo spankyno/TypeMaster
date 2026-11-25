@@ -82,6 +82,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     onClose();
   };
 
+  const handleLogoutAll = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = useTypingStore.getState().authToken || localStorage.getItem('typemaster_token');
+      if (token) {
+        await fetch('/api/auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action: 'logout-all' }),
+        });
+      }
+    } catch {
+      // still clear local session
+    }
+    logoutUser();
+    setLoading(false);
+    onClose();
+  };
+
   const handleTestDb = async () => {
     setTestingDb(true);
     await checkDbConnection();
@@ -304,6 +327,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             >
               <LogOut className="w-4 h-4" />
               Cerrar sesión
+            </button>
+            <button
+              onClick={handleLogoutAll}
+              disabled={loading}
+              className="w-full py-2.5 text-xs font-medium text-neutral-500 hover:text-rose-500 transition-colors"
+            >
+              Cerrar sesión en todos los dispositivos
             </button>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import confetti from 'canvas-confetti';
 import { TestSettings, TestResult, UserProfile, Achievement, DbConnectionStatus } from '../types';
-import { SPANISH_WORDS, SPANISH_QUOTES } from '../data/spanishWords';
+import { SPANISH_WORDS, SPANISH_QUOTES, SPANISH_PROSE } from '../data/spanishWords';
 import { AdaptiveEngine, KeyRecord } from '../lib/adaptive/adaptiveEngine';
 import { soundEngine } from '../lib/engine/soundEngine';
 
@@ -175,6 +175,9 @@ export const useTypingStore = create<TypingState>((set, get) => {
     if (settings.mode === 'quote') {
       const q = SPANISH_QUOTES[Math.floor(Math.random() * SPANISH_QUOTES.length)];
       return q;
+    }
+    if (settings.mode === 'prose') {
+      return SPANISH_PROSE[Math.floor(Math.random() * SPANISH_PROSE.length)];
     }
     if (settings.mode === 'custom') {
       return ''; // custom text is supplied via initTest(customText)
@@ -611,6 +614,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
         if (currentState.settings.mode === 'words' && newIndex >= target.length) {
           newStatus = 'finished';
         } else if (currentState.settings.mode === 'quote' && newIndex >= target.length) {
+          newStatus = 'finished';
+        } else if (currentState.settings.mode === 'prose' && newIndex >= target.length) {
           newStatus = 'finished';
         } else if (currentState.settings.mode === 'adaptive' && newIndex >= target.length) {
           newStatus = 'finished';

@@ -1,83 +1,137 @@
 # TypeMaster Pro ⌨️
 
-**TypeMaster Pro** es una aplicación web moderna de alto rendimiento para el entrenamiento de mecanografía al tacto (touch typing), optimizada para teclados físicos con distribución **QWERTY Español**. Incluye un motor de progresión adaptativa, análisis en tiempo real, sintetizador de audio para teclas y persistencia en la nube con **Neon PostgreSQL** y **Vercel**.
+Aplicación web de **entrenamiento de mecanografía al tacto** (touch typing) optimizada para teclados **QWERTY Español**. Incluye progresión adaptativa, métricas en tiempo real, autenticación con email/contraseña y sincronización opcional en **Neon PostgreSQL** (Vercel).
 
 ---
 
-## ✨ Características Principales
+## Características
 
-- **Múltiples Modos de Práctica:**
-  - ⏱️ **Tiempo**: Tests de 15, 30, 60 y 120 segundos.
-  - 📝 **Palabras**: Pruebas de 10, 25, 50 y 100 palabras seleccionadas.
-  - 💬 **Citas**: Frases célebres y proverbios en español.
-  - 🎯 **Entrenamiento Adaptativo**: Progresión algorítmica estilo Keybr que evalúa la confianza y latencia (EMA) por cada letra del abecedario, desbloqueando progresivamente nuevas teclas conforme alcanzas el dominio necesario.
-  - ✏️ **Texto Personalizado**: Carga y practica con fragmentos propios o código.
-- **Teclado Virtual Interactivo (QWERTY ES):**
-  - Mapeo físico visual en tiempo real.
-  - Mapa de calor dinámico según tasa de acierto y velocidad por tecla.
-- **Métricas Profesionales y Gráficos:**
-  - PPM Neto (WPM), PPM Bruto (Raw WPM), Precisión (%) y Consistencia de ritmo.
-  - Evolución de velocidad segundo a segundo mediante gráficos interactivos.
-  - Exportación de historial de sesiones a formato **JSON** y **CSV**.
-- **Motor de Sonido Sintetizado (Web Audio API):**
-  - Efectos de sonido mecánicos, máquina de escribir y burbuja sin necesidad de descargar archivos de audio externos.
-- **Gamificación y Constancia:**
-  - Sistema de experiencia (XP), niveles, rachas diarias y medallas de logros.
-- **Arquitectura Serverless y Persistencia:**
-  - Compatible con almacenamiento local en navegador (`localStorage`) y sincronización remota con base de datos serverless **Neon PostgreSQL**.
+- **Modos de práctica**
+  - ⏱️ **Tiempo**: 15 / 30 / 60 / 120 segundos
+  - 📝 **Palabras**: 10 / 25 / 50 / 100 palabras
+  - 💬 **Citas**: frases breves
+  - 📖 **Prosa**: párrafos coherentes en español
+  - 🎯 **Adaptativo**: desbloqueo progresivo de letras (estilo Keybr)
+  - ✏️ **Personalizado**: pega tu propio texto
+- **Teclado virtual QWERTY ES** con mapa de calor
+- **Métricas**: PPM neto/bruto, precisión, consistencia, gráfico WPM
+- **Sonidos** sintetizados (Web Audio API)
+- **Cuentas**: invitados (solo local) vs registrados (sync en nube)
+- **Gamificación**: XP, niveles, rachas, logros
 
 ---
 
-## 🛠️ Tecnologías Utilizadas
+## Invitado vs registrado
 
-- **Frontend:** [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS v4](https://tailwindcss.com/)
-- **Empaquetador:** [Vite](https://vite.dev/) (con partición optimizada de chunks)
-- **Gestión de Estado:** [Zustand](https://github.com/pmndrs/zustand)
-- **Visualización de Datos:** [Recharts](https://recharts.org/)
-- **Iconografía e Interfaz:** [Lucide React](https://lucide.dev/), [Canvas Confetti](https://www.npmjs.com/package/canvas-confetti)
-- **Base de Datos & Backend Serverless:** [Neon Database](https://neon.tech/) (PostgreSQL serverless con `@neondatabase/serverless`) y [Vercel](https://vercel.com/) Functions.
+| Función | Invitado | Registrado |
+|--------|----------|------------|
+| Practicar todos los modos | ✅ | ✅ |
+| Historial en este navegador | ✅ | ✅ |
+| Export CSV / JSON | ✅ | ✅ |
+| Guardar / cargar historial en Neon | ❌ | ✅ |
+| Sincronizar XP y perfil entre dispositivos | ❌ | ✅ |
 
----
-
-## 🚀 Ejecución Local
-
-### Prerrequisitos
-- Node.js (versión 18 o superior)
-- npm o pnpm
-
-### Pasos
-
-1. Clona el repositorio e instala las dependencias:
-   ```bash
-   npm install
-   ```
-
-2. *(Opcional)* Configura la base de datos Neon:
-   Copia el archivo `.env.example` como `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   Configura tu variable `DATABASE_URL` con tu cadena de conexión de Neon. Si no la configuras, la aplicación funcionará de manera local en memoria y mediante `localStorage`.
-
-3. Inicia el servidor de desarrollo:
-   ```bash
-   npm run dev
-   ```
-
-4. Abre tu navegador en `http://localhost:3000`.
+Al terminar un test como invitado se muestra un aviso para crear cuenta y no perder el progreso en la nube.
 
 ---
 
-## ☁️ Despliegue en Producción (Vercel + Neon)
+## Autenticación
 
-Para desplegar la aplicación completa y preparar la base de datos PostgreSQL en Neon utilizando **únicamente las plataformas web** (sin comandos de consola), consulta la guía detallada:
+- **Registro / login** con **email + contraseña** (sin verificación de correo en esta versión).
+- Contraseñas: **PBKDF2-SHA256** (100 000 iteraciones) en el servidor.
+- Sesión: **JWT** (30 días) en `localStorage`.
+- **Rate limit** en `/api/auth` (por IP y, en login, por IP+email).
+- **Cerrar sesión en todos los dispositivos**: incrementa `token_version` en la base de datos e invalida JWT antiguos.
+- En **producción** es **obligatorio** definir `JWT_SECRET` (mín. 16 caracteres).
 
-👉 **[Guía Paso a Paso de Despliegue en Vercel y Neon](./GUIA_DESPLIEGUE_VERCEL_NEON.md)**
+### Variables de entorno (Vercel)
 
-El esquema SQL listo para ejecutar se encuentra en [schema.sql](./schema.sql).
+```bash
+DATABASE_URL=postgresql://...   # Neon
+JWT_SECRET=una-cadena-larga-y-aleatoria
+```
 
 ---
 
-## 📜 Licencia
+## Stack
 
-Distribuido bajo licencia MIT.
+- React 19, TypeScript, Vite 6, Tailwind CSS v4
+- Zustand, Recharts, Lucide
+- Neon (PostgreSQL serverless) + Vercel Functions
+- Analítica propia (Cloudflare Workers tracker)
+
+---
+
+## Desarrollo local
+
+```bash
+npm install
+cp .env.example .env   # opcional: DATABASE_URL y JWT_SECRET
+npm run dev            # API + frontend (tsx server.ts)
+# o solo frontend:
+npm run dev:vite
+```
+
+Abre `http://localhost:3000` (o el puerto que indique Vite).
+
+Sin `DATABASE_URL` la app funciona en **modo local** (memoria + `localStorage`).
+
+---
+
+## Base de datos (Neon)
+
+Ejecuta el contenido de [`schema.sql`](./schema.sql) en el SQL Editor de Neon. Incluye:
+
+- Tabla `users` con `password_hash` y `token_version`
+- Tablas `tests`, `key_stats`, `achievements`
+- Índice único de email (cuando no está vacío)
+
+Migración mínima si ya tenías el esquema antiguo:
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+  ON users (LOWER(email))
+  WHERE email IS NOT NULL AND email <> '';
+```
+
+Guía detallada de despliegue: [`GUIA_DESPLIEGUE_VERCEL_NEON.md`](./GUIA_DESPLIEGUE_VERCEL_NEON.md).
+
+---
+
+## API (resumen)
+
+| Ruta | Método | Auth | Descripción |
+|------|--------|------|-------------|
+| `/api/auth` | POST `action=register\|login\|logout-all` | logout-all: JWT | Registro, login, revocar sesiones |
+| `/api/auth` | GET | JWT | Sesión actual |
+| `/api/tests` | GET / POST | JWT | Historial / guardar test |
+| `/api/user` | GET / POST | JWT | Perfil |
+| `/api/health` | GET | — | Estado de Neon |
+
+---
+
+## Scripts
+
+```bash
+npm run dev       # servidor de desarrollo integrado
+npm run build     # build de producción
+npm run preview   # previsualizar build
+npm run lint      # tsc --noEmit
+```
+
+---
+
+## Autor y licencia
+
+**Autor:** Aitor Sánchez Gutiérrez. © 2026 — Todos los derechos reservados.
+
+- Blog: https://aitorsanchez.pages.dev/
+- Hub: https://aitorhub.vercel.app/
+- Contacto: https://aitorsanchez.pages.dev/contacto/
+
+La política de privacidad está en la app (pestaña **Acerca de → Privacidad**).
+
+Distribuido bajo licencia MIT salvo que se indique lo contrario en el repositorio.

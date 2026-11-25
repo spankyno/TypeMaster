@@ -1,5 +1,15 @@
 import { fetchTests, insertTest } from './_db.js';
 import { requireAuth } from './_authHelpers.js';
+import { getTokenVersion } from './_db.js';
+
+async function requireValidSession(req: any) {
+  const payload = requireAuth(req);
+  if (!payload) return null;
+  const tv = await getTokenVersion(payload.sub);
+  if ((payload.tv ?? 0) !== tv) return null;
+  return payload;
+}
+
 
 function parseBody(req: any): Promise<any> {
   return new Promise((resolve) => {
@@ -34,7 +44,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (req.method === 'GET') {
-      const auth = requireAuth(req);
+      const auth = await requireValidSession(req);
       // Only authenticated users can load cloud history
       if (!auth) {
         return res.status(401).json({ error: 'Debes iniciar sesión para sincronizar el historial' });
@@ -45,7 +55,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
-      const auth = requireAuth(req);
+      const auth = await requireValidSession(req);
       if (!auth) {
         return res.status(401).json({ error: 'Debes iniciar sesión para guardar tests en la nube' });
       }

@@ -31,6 +31,8 @@ export interface DbUserProfile {
   minutesToday: number;
   /** Only present in internal lookups — never send to client */
   passwordHash?: string;
+  /** Bump to invalidate all JWTs for this user */
+  tokenVersion?: number;
 }
 
 // In-memory fallback for local dev when DATABASE_URL is not configured
@@ -380,6 +382,7 @@ export async function registerUser(
       dailyGoalMinutes: 10,
       minutesToday: 0,
       passwordHash,
+      tokenVersion: 0,
     };
     localMemoryDb.users[userId] = profile;
     return stripPassword(profile);
@@ -394,10 +397,10 @@ export async function registerUser(
 
   await sql`
     INSERT INTO users (
-      id, username, email, password_hash, xp, level, streak, max_streak,
+      id, username, email, password_hash, token_version, xp, level, streak, max_streak,
       last_active_date, daily_goal_minutes, minutes_today
     ) VALUES (
-      ${userId}, ${cleanUsername}, ${cleanEmail}, ${passwordHash},
+      ${userId}, ${cleanUsername}, ${cleanEmail}, ${passwordHash}, 0,
       0, 1, 1, 1, CURRENT_DATE, 10, 0
     )
   `;
@@ -430,6 +433,7 @@ export async function fetchUserByEmail(email: string): Promise<DbUserProfile | n
   try {
     const rows = await sql`
       SELECT id, username, email, password_hash AS "passwordHash",
+             COALESCE(token_version, 0) AS "tokenVersion",
              xp, level, streak, max_streak AS "maxStreak",
              last_active_date::text AS "lastActiveDate",
              daily_goal_minutes AS "dailyGoalMinutes",
@@ -444,4 +448,45 @@ export async function fetchUserByEmail(email: string): Promise<DbUserProfile | n
     console.error('fetchUserByEmail error:', err);
     return null;
   }
+}
+
+
+/** Return current token_version for a user (0 if missing). */
+export async function getTokenVersion(userId: string): Promise<number> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    return localMemoryDb.users[userId]?.tokenVersion ?? 0;
+  }
+  try {
+    const rows = await sql`
+      SELECT COALESCE(token_version, 0) AS tv FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (rows && rows.length > 0) return Number(rows[0].tv) || 0;
+  } catch (err) {
+    console.error('getTokenVersion error:', err);
+  }
+  return 0;
+}
+
+/** Invalidate all sessions for a user by bumping token_version. Returns new version. */
+export async function incrementTokenVersion(userId: string): Promise<number> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    const u = localMemoryDb.users[userId];
+    if (!u) return 0;
+    u.tokenVersion = (u.tokenVersion || 0) + 1;
+    return u.tokenVersion;
+  }
+  try {
+    const rows = await sql`
+      UPDATE users
+      SET token_version = COALESCE(token_version, 0) + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${userId}
+      RETURNING token_version AS tv
+    `;
+    if (rows && rows.length > 0) return Number(rows[0].tv) || 0;
+  } catch (err) {
+    console.error('incrementTokenVersion error:', err);
+  }
+  return 0;
 }

@@ -154,7 +154,7 @@ export const AboutView: React.FC = () => {
               Funciones principales
             </h3>
             <ul className="list-disc pl-5 space-y-1.5">
-              <li>Modos: tiempo (15–120 s), palabras, citas, adaptativo y texto personalizado.</li>
+              <li>Modos: tiempo (15–120 s), palabras, citas, prosa (párrafos coherentes), adaptativo y texto personalizado.</li>
               <li>Métricas: PPM neto/bruto, precisión, consistencia, serie temporal de WPM.</li>
               <li>Entrenamiento adaptativo con desbloqueo progresivo de letras.</li>
               <li>Teclado virtual QWERTY ES con mapa de calor.</li>

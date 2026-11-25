@@ -1,4 +1,4 @@
-export type TestMode = 'time' | 'words' | 'quote' | 'zen' | 'custom' | 'adaptive';
+export type TestMode = 'time' | 'words' | 'quote' | 'prose' | 'zen' | 'custom' | 'adaptive';
 export type TimeSubMode = 15 | 30 | 60 | 120;
 export type WordsSubMode = 10 | 25 | 50 | 100;
 

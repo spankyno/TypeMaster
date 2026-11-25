@@ -84,6 +84,21 @@ export const SPANISH_QUOTES = [
   "Escribe despacio para pensar, y deprisa para crear.",
 ];
 
+
+/** Párrafos coherentes en español para el modo Prosa */
+export const SPANISH_PROSE = [
+  "La mañana empezó con un café caliente y la ventana abierta al ruido lejano de la ciudad. Mientras el sol subía entre los edificios, repasé la lista de tareas y decidí empezar por lo más difícil. A veces la claridad llega cuando dejas de buscar atajos y te concentras en un solo paso cada vez.",
+  "En el taller, el olor a madera recién cortada se mezclaba con el zumbido de las máquinas. El maestro explicó que la precisión no es un don, sino el resultado de medir dos veces y cortar una. Aquella frase se quedó grabada mientras alineaba la regla sobre el tablero.",
+  "Cruzamos el puente al atardecer. El río reflejaba luces naranjas y el viento traía un frescor inesperado. Hablamos poco, pero el silencio no pesaba: compartíamos la sensación de haber dejado atrás una semana larga y de poder, por fin, respirar sin prisa.",
+  "El libro estaba marcado en la página ciento doce. Volví a leer el párrafo donde el protagonista dudaba entre quedarse o marcharse, y me di cuenta de que yo también posponía una decisión similar. Cerré el volumen, anoté una fecha en el calendario y sentí que el nudo se aflojaba un poco.",
+  "Programar es, en el fondo, traducir ideas a instrucciones que una máquina pueda ejecutar sin ambigüedad. Cuando el código compila a la primera, parece magia; cuando falla, es una invitación a pensar con más cuidado. Entre un extremo y otro se construye el oficio.",
+  "La plaza del pueblo se llenó de voces el domingo. Había puestos de fruta, pan y queso, y un grupo tocaba en un rincón con más entusiasmo que afinación. Los niños corrían entre las mesas mientras los mayores discutían del tiempo y de la cosecha como cada año.",
+  "Aprendí a escribir a máquina en un aula con teclados pesados y pantallas que parpadeaban. El profesor insistía en no mirar las teclas, aunque al principio era casi imposible. Con el tiempo, los dedos encontraron su camino solos y la vista se liberó para seguir el texto.",
+  "No hace falta un plan perfecto para avanzar. Basta con una dirección razonable y la disciplina de volver al trabajo después de cada interrupción. La constancia, aburrida en apariencia, acaba moviendo más que los arranques de motivación que duran un día.",
+  "El tren salió con retraso, pero el paisaje compensó la espera. Campos verdes, un pueblo con campanario blanco y nubes bajas que parecían tocar las colinas. Saqué el cuaderno y escribí sin objetivo concreto, solo para no perder la sensación de estar de camino.",
+  "La confianza en el teclado se parece a la confianza al caminar: al principio cuentas cada paso y al final ni te acuerdas de que tus pies se mueven. Llegar a ese punto exige repetición consciente, correcciones honestas y la paciencia de no rendirse en la semana más lenta.",
+];
+
 export const QWERTY_ES_KEYS = [
   [
     { key: 'º', shift: 'ª', finger: 'l5' }, { key: '1', shift: '!', finger: 'l5' }, { key: '2', shift: '"', finger: 'l4' }, { key: '3', shift: '·', finger: 'l3' }, { key: '4', shift: '$', finger: 'l2' }, { key: '5', shift: '%', finger: 'l2' }, { key: '6', shift: '&', finger: 'r2' }, { key: '7', shift: '/', finger: 'r2' }, { key: '8', shift: '(', finger: 'r3' }, { key: '9', shift: ')', finger: 'r4' }, { key: '0', shift: '=', finger: 'r5' }, { key: "'", shift: '?', finger: 'r5' }, { key: '¡', shift: '¿', finger: 'r5' }

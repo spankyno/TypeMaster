@@ -10,6 +10,7 @@ import {
   Sparkles,
   RefreshCw,
   Edit3,
+  BookOpen,
   Keyboard,
   CaseSensitive,
   Binary,
@@ -237,6 +238,14 @@ export const TypingArea: React.FC = () => {
                 }`}
               >
                 <AlignLeft className="w-3.5 h-3.5" /> Citas
+              </button>
+              <button
+                onClick={() => updateSettings({ mode: 'prose' })}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  settings.mode === 'prose' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" /> Prosa
               </button>
               <button
                 onClick={() => updateSettings({ mode: 'adaptive' })}
