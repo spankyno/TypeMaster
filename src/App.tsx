@@ -9,11 +9,27 @@ import { DesktopWarning } from './components/DesktopWarning';
 import { useTypingStore } from './store/useTypingStore';
 import { Database } from 'lucide-react';
 
+function loadDarkMode(): boolean {
+  try {
+    const stored = localStorage.getItem('typemaster_darkmode');
+    if (stored !== null) return stored === 'true';
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'test' | 'stats' | 'adaptive' | 'settings'>('test');
-  const [darkMode, setDarkMode] = useState<boolean>(true);
-  const [isAchievementsOpen, setIsAchievementsOpen] = useState<boolean>(false);
-  const { loadSavedData, isAuthModalOpen, setIsAuthModalOpen, dbStatus } = useTypingStore();
+  const [darkMode, setDarkMode] = useState<boolean>(loadDarkMode);
+  const {
+    loadSavedData,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    isAchievementsModalOpen,
+    setIsAchievementsModalOpen,
+    dbStatus,
+  } = useTypingStore();
 
   useEffect(() => {
     loadSavedData();
@@ -25,6 +41,11 @@ export default function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    try {
+      localStorage.setItem('typemaster_darkmode', String(darkMode));
+    } catch {
+      // ignore
+    }
   }, [darkMode]);
 
   return (
@@ -35,7 +56,7 @@ export default function App() {
           setCurrentTab={setCurrentTab}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
-          onOpenAchievements={() => setIsAchievementsOpen(true)}
+          onOpenAchievements={() => setIsAchievementsModalOpen(true)}
           onOpenAuth={() => setIsAuthModalOpen(true)}
         />
 
@@ -47,8 +68,8 @@ export default function App() {
       </div>
 
       <AchievementsModal
-        isOpen={isAchievementsOpen}
-        onClose={() => setIsAchievementsOpen(false)}
+        isOpen={isAchievementsModalOpen}
+        onClose={() => setIsAchievementsModalOpen(false)}
       />
 
       <AuthModal
@@ -60,7 +81,7 @@ export default function App() {
 
       <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-neutral-200 dark:border-neutral-900 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-3">
         <div>TypeMaster Pro • Alta velocidad y precisión de tecleo</div>
-        
+
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsAuthModalOpen(true)}
@@ -69,7 +90,8 @@ export default function App() {
           >
             <Database className="w-3.5 h-3.5" />
             <span>
-              Neon DB: {dbStatus === 'connected' ? (
+              Neon DB:{' '}
+              {dbStatus === 'connected' ? (
                 <strong className="text-emerald-500">Conectada</strong>
               ) : (
                 <strong className="text-amber-500">Modo Local</strong>

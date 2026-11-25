@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTypingStore } from '../store/useTypingStore';
-import { Flame, CheckCircle2, Lock, Sparkles, Target } from 'lucide-react';
+import { Flame, CheckCircle2, Lock, Sparkles, Target, RotateCcw } from 'lucide-react';
 
 export const AdaptiveView: React.FC = () => {
-  const { adaptiveEngine, updateSettings, initTest } = useTypingStore();
+  const { adaptiveEngine, updateSettings, initTest, resetAdaptiveProgress } = useTypingStore();
   const keyStats = adaptiveEngine.getKeyStats();
   const unlockedLetters = adaptiveEngine.getUnlockedLetters();
   const nextLetter = adaptiveEngine.getNextLetterToUnlock();
@@ -11,6 +11,16 @@ export const AdaptiveView: React.FC = () => {
   const handleStartAdaptive = () => {
     updateSettings({ mode: 'adaptive' });
     initTest();
+  };
+
+  const handleReset = () => {
+    if (
+      window.confirm(
+        '¿Reiniciar el progreso adaptativo? Se bloquearán de nuevo todas las letras excepto las iniciales (e, s, a, r, n, i).'
+      )
+    ) {
+      resetAdaptiveProgress();
+    }
   };
 
   return (
@@ -22,17 +32,27 @@ export const AdaptiveView: React.FC = () => {
             Entrenamiento Adaptativo (Estilo Keybr)
           </h2>
           <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-            Progresión adaptativa algorítmica basada en confianza por letra y generación fonética de palabras.
+            Progresión adaptativa basada en confianza por letra. Las estadísticas se actualizan en todos los modos de práctica.
           </p>
         </div>
 
-        <button
-          onClick={handleStartAdaptive}
-          className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
-        >
-          <Sparkles className="w-4 h-4" />
-          Iniciar Sesión Adaptativa
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleReset}
+            className="px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-sm transition-all flex items-center gap-2 border border-neutral-200 dark:border-neutral-700"
+            title="Reiniciar progreso de letras"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reiniciar
+          </button>
+          <button
+            onClick={handleStartAdaptive}
+            className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            Iniciar Sesión Adaptativa
+          </button>
+        </div>
       </div>
 
       {/* Progress Status Card */}

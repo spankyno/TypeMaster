@@ -3,7 +3,18 @@ import { useTypingStore } from '../store/useTypingStore';
 import { VirtualKeyboard } from './VirtualKeyboard';
 import { TestResultModal } from './TestResultModal';
 import { CustomTextModal } from './CustomTextModal';
-import { Clock, Hash, AlignLeft, Sparkles, RefreshCw, Edit3 } from 'lucide-react';
+import {
+  Clock,
+  Hash,
+  AlignLeft,
+  Sparkles,
+  RefreshCw,
+  Edit3,
+  Keyboard,
+  CaseSensitive,
+  Binary,
+  ShieldAlert,
+} from 'lucide-react';
 
 export const TypingArea: React.FC = () => {
   const {
@@ -22,60 +33,118 @@ export const TypingArea: React.FC = () => {
     initTest,
     tickTimer,
     adaptiveEngine,
-    isAuthModalOpen
+    isAuthModalOpen,
+    isAchievementsModalOpen,
   } = useTypingStore();
 
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const caretRef = useRef<HTMLSpanElement>(null);
+  const textContainerRef = useRef<HTMLDivElement>(null);
 
-  const isAnyModalOpen = isAuthModalOpen || isCustomModalOpen;
+  const isAnyModalOpen = isAuthModalOpen || isCustomModalOpen || isAchievementsModalOpen;
 
-  // Focus hidden input on mount and click ONLY when not inside modal or another input
+  /** Bring focus to the hidden typing input (skips when a modal is open). */
+  const focusTypingInput = () => {
+    if (isAnyModalOpen) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  // Keep focus on the typing input whenever a test is ready or modals close.
   useEffect(() => {
-    const focusInput = (e?: MouseEvent) => {
+    if (!isAnyModalOpen && status !== 'finished') {
+      focusTypingInput();
+    }
+  }, [status, targetText, isAnyModalOpen]);
+
+  // Click anywhere (except real form fields / dialogs) → refocus typing input.
+  useEffect(() => {
+    const onWindowClick = (e: MouseEvent) => {
       if (isAnyModalOpen) return;
 
-      if (e) {
-        const target = e.target as HTMLElement | null;
-        if (target && target.closest('input, textarea, select, button, [role="dialog"]')) {
-          return;
-        }
-      }
-
-      const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input:not([data-typing-input]), textarea, select, [role="dialog"]')) {
         return;
       }
 
-      inputRef.current?.focus();
+      focusTypingInput();
     };
 
-    if (!isAnyModalOpen) {
-      focusInput();
-    }
-
-    window.addEventListener('click', focusInput);
-    return () => window.removeEventListener('click', focusInput);
+    window.addEventListener('click', onWindowClick);
+    return () => window.removeEventListener('click', onWindowClick);
   }, [isAnyModalOpen]);
+
+  // Reclaim focus if the hidden input blurs while a test is active/ready.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+
+    const onBlur = () => {
+      if (isAnyModalOpen || status === 'finished') return;
+
+      setTimeout(() => {
+        if (isAnyModalOpen || status === 'finished') return;
+        const active = document.activeElement as HTMLElement | null;
+        if (
+          active &&
+          (active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.tagName === 'SELECT' ||
+            active.closest('[role="dialog"]'))
+        ) {
+          return;
+        }
+        inputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    };
+
+    el.addEventListener('blur', onBlur);
+    return () => el.removeEventListener('blur', onBlur);
+  }, [isAnyModalOpen, status]);
+
+  // Auto-scroll so the current caret stays visible inside the text container.
+  useEffect(() => {
+    const caret = caretRef.current;
+    const container = textContainerRef.current;
+    if (!caret || !container) return;
+
+    const caretRect = caret.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const padding = 24;
+
+    if (caretRect.bottom > containerRect.bottom - padding) {
+      container.scrollTop += caretRect.bottom - containerRect.bottom + padding;
+    } else if (caretRect.top < containerRect.top + padding) {
+      container.scrollTop -= containerRect.top + padding - caretRect.top;
+    }
+  }, [currentIndex, targetText]);
 
   // Timer interval for time mode
   useEffect(() => {
-    let interval: any = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (status === 'running') {
       interval = setInterval(() => {
         tickTimer();
       }, 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [status, tickTimer]);
 
-  // Keyboard shortcut listener (Tab = restart, Enter when finished = next test, Esc = restart)
+  // Keyboard shortcuts (Tab / Esc = restart, Enter when finished = next test)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isAnyModalOpen) return;
 
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
+        target !== inputRef.current
+      ) {
         return;
       }
 
@@ -109,11 +178,17 @@ export const TypingArea: React.FC = () => {
   const expectedKey = currentIndex < targetText.length ? targetText[currentIndex] : null;
   const keyStats = adaptiveEngine.getKeyStats();
 
+  const toggleBtn = (active: boolean) =>
+    active
+      ? 'bg-amber-500 text-neutral-950 font-bold'
+      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white';
+
   return (
     <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col items-center justify-center min-h-[75vh]">
       {/* Hidden input for high performance keystroke capture */}
       <input
         ref={inputRef}
+        data-typing-input
         type="text"
         className="opacity-0 absolute w-0 h-0 pointer-events-none"
         onKeyDown={handleInputKeyDown}
@@ -122,6 +197,8 @@ export const TypingArea: React.FC = () => {
         autoCapitalize="off"
         spellCheck="false"
         disabled={isAnyModalOpen}
+        tabIndex={0}
+        aria-label="Área de escritura del test"
       />
 
       {/* Results View if Finished */}
@@ -130,13 +207,15 @@ export const TypingArea: React.FC = () => {
       ) : (
         <div className="w-full flex flex-col items-center gap-8">
           {/* Mode Selector Toolbar */}
-          <div className={`transition-opacity duration-300 flex flex-wrap items-center justify-center gap-3 bg-neutral-100 dark:bg-neutral-900/80 backdrop-blur-md p-2 rounded-2xl border border-neutral-200 dark:border-neutral-800 ${
-            status === 'running' ? 'opacity-20 hover:opacity-100' : 'opacity-100'
-          }`}>
-            {/* Modes */}
+          <div
+            className={`transition-opacity duration-300 flex flex-wrap items-center justify-center gap-3 bg-neutral-100 dark:bg-neutral-900/80 backdrop-blur-md p-2 rounded-2xl border border-neutral-200 dark:border-neutral-800 ${
+              status === 'running' ? 'opacity-20 hover:opacity-100' : 'opacity-100'
+            }`}
+          >
+            {/* Modes — updateSettings already regenerates text; no extra initTest */}
             <div className="flex items-center gap-1">
               <button
-                onClick={() => { updateSettings({ mode: 'time' }); initTest(); }}
+                onClick={() => updateSettings({ mode: 'time' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                   settings.mode === 'time' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
                 }`}
@@ -144,7 +223,7 @@ export const TypingArea: React.FC = () => {
                 <Clock className="w-3.5 h-3.5" /> Tiempo
               </button>
               <button
-                onClick={() => { updateSettings({ mode: 'words' }); initTest(); }}
+                onClick={() => updateSettings({ mode: 'words' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                   settings.mode === 'words' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
                 }`}
@@ -152,7 +231,7 @@ export const TypingArea: React.FC = () => {
                 <Hash className="w-3.5 h-3.5" /> Palabras
               </button>
               <button
-                onClick={() => { updateSettings({ mode: 'quote' }); initTest(); }}
+                onClick={() => updateSettings({ mode: 'quote' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                   settings.mode === 'quote' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
                 }`}
@@ -160,7 +239,7 @@ export const TypingArea: React.FC = () => {
                 <AlignLeft className="w-3.5 h-3.5" /> Citas
               </button>
               <button
-                onClick={() => { updateSettings({ mode: 'adaptive' }); initTest(); }}
+                onClick={() => updateSettings({ mode: 'adaptive' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                   settings.mode === 'adaptive' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
                 }`}
@@ -185,9 +264,11 @@ export const TypingArea: React.FC = () => {
                 {[15, 30, 60, 120].map((t) => (
                   <button
                     key={t}
-                    onClick={() => { updateSettings({ timeSubMode: t as any }); initTest(); }}
+                    onClick={() => updateSettings({ timeSubMode: t as 15 | 30 | 60 | 120 })}
                     className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                      settings.timeSubMode === t ? 'text-amber-500 bg-amber-500/10' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                      settings.timeSubMode === t
+                        ? 'text-amber-500 bg-amber-500/10'
+                        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                     }`}
                   >
                     {t}s
@@ -196,14 +277,16 @@ export const TypingArea: React.FC = () => {
               </div>
             )}
 
-            {settings.mode === 'words' && (
+            {(settings.mode === 'words' || settings.mode === 'adaptive') && (
               <div className="flex items-center gap-1 text-xs">
                 {[10, 25, 50, 100].map((w) => (
                   <button
                     key={w}
-                    onClick={() => { updateSettings({ wordsSubMode: w as any }); initTest(); }}
+                    onClick={() => updateSettings({ wordsSubMode: w as 10 | 25 | 50 | 100 })}
                     className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                      settings.wordsSubMode === w ? 'text-amber-500 bg-amber-500/10' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                      settings.wordsSubMode === w
+                        ? 'text-amber-500 bg-amber-500/10'
+                        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                     }`}
                   >
                     {w}
@@ -211,6 +294,51 @@ export const TypingArea: React.FC = () => {
                 ))}
               </div>
             )}
+
+            <div className="w-[1px] h-5 bg-neutral-300 dark:bg-neutral-700" />
+
+            {/* Option toggles: punctuation, numbers, keyboard, strict */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => updateSettings({ includePunctuation: !settings.includePunctuation })}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${toggleBtn(settings.includePunctuation)}`}
+                title="Incluir puntuación (, .)"
+              >
+                <CaseSensitive className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">,@</span>
+              </button>
+              <button
+                onClick={() => updateSettings({ includeNumbers: !settings.includeNumbers })}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${toggleBtn(settings.includeNumbers)}`}
+                title="Incluir números"
+              >
+                <Binary className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">123</span>
+              </button>
+              <button
+                onClick={() => updateSettings({ showVirtualKeyboard: !settings.showVirtualKeyboard })}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${toggleBtn(settings.showVirtualKeyboard)}`}
+                title="Mostrar teclado virtual"
+              >
+                <Keyboard className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() =>
+                  updateSettings({
+                    errorMode: settings.errorMode === 'strict' ? 'normal' : 'strict',
+                  })
+                }
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${toggleBtn(settings.errorMode === 'strict')}`}
+                title={
+                  settings.errorMode === 'strict'
+                    ? 'Modo estricto: no avanza con error'
+                    : 'Activar modo estricto'
+                }
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Strict</span>
+              </button>
+            </div>
           </div>
 
           {/* Live WPM & Timer Header */}
@@ -226,16 +354,13 @@ export const TypingArea: React.FC = () => {
             )}
           </div>
 
-          {/* Main Text Display */}
-          <div 
-            className="w-full bg-white dark:bg-neutral-900/40 p-8 md:p-12 rounded-3xl border border-neutral-200 dark:border-neutral-800/80 shadow-sm relative overflow-hidden select-none cursor-text min-h-[220px] flex items-center"
-            onClick={() => {
-              if (!isAnyModalOpen) {
-                inputRef.current?.focus();
-              }
-            }}
+          {/* Main Text Display — scrollable, caret auto-scroll */}
+          <div
+            ref={textContainerRef}
+            className="w-full bg-white dark:bg-neutral-900/40 p-8 md:p-12 rounded-3xl border border-neutral-200 dark:border-neutral-800/80 shadow-sm relative select-none cursor-text min-h-[220px] max-h-[360px] overflow-y-auto flex items-start"
+            onClick={focusTypingInput}
           >
-            <div className="font-mono text-2xl md:text-3xl leading-relaxed tracking-wide flex flex-wrap gap-y-3 whitespace-pre">
+            <div className="font-mono text-2xl md:text-3xl leading-relaxed tracking-wide flex flex-wrap gap-y-3 whitespace-pre w-full">
               {targetText.split('').map((char, idx) => {
                 const typed = typedChars[idx];
                 let statusClass = 'text-neutral-400 dark:text-neutral-600';
@@ -249,6 +374,7 @@ export const TypingArea: React.FC = () => {
                 return (
                   <span
                     key={idx}
+                    ref={isCurrent ? caretRef : undefined}
                     className={`relative transition-colors duration-75 inline-block min-w-[0.5em] text-center ${statusClass} ${
                       isCurrent ? 'border-l-2 border-amber-500 animate-pulse' : ''
                     }`}
@@ -262,10 +388,24 @@ export const TypingArea: React.FC = () => {
 
           {/* Controls Hint & Restart */}
           <div className="flex items-center justify-between w-full px-2">
-            <div className="text-xs text-neutral-400 flex items-center gap-3">
-              <span>Pulsa <kbd className="px-2 py-1 bg-neutral-100 dark:bg-neutral-800 rounded-md font-mono text-neutral-800 dark:text-neutral-200">Tab</kbd> para reiniciar</span>
-              <span>•</span>
-              <span><kbd className="px-2 py-1 bg-neutral-100 dark:bg-neutral-800 rounded-md font-mono text-neutral-800 dark:text-neutral-200">Esc</kbd> para menú</span>
+            <div className="text-xs text-neutral-400 flex items-center gap-3 flex-wrap">
+              <span>
+                Pulsa{' '}
+                <kbd className="px-2 py-1 bg-neutral-100 dark:bg-neutral-800 rounded-md font-mono text-neutral-800 dark:text-neutral-200">
+                  Tab
+                </kbd>{' '}
+                o{' '}
+                <kbd className="px-2 py-1 bg-neutral-100 dark:bg-neutral-800 rounded-md font-mono text-neutral-800 dark:text-neutral-200">
+                  Esc
+                </kbd>{' '}
+                para reiniciar
+              </span>
+              {settings.errorMode === 'strict' && (
+                <>
+                  <span>•</span>
+                  <span className="text-rose-400">Modo estricto activo</span>
+                </>
+              )}
             </div>
 
             <button

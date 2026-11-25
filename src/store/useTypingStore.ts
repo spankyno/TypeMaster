@@ -1,8 +1,19 @@
 import { create } from 'zustand';
+import confetti from 'canvas-confetti';
 import { TestSettings, TestResult, UserProfile, Achievement, DbConnectionStatus } from '../types';
 import { SPANISH_WORDS, SPANISH_QUOTES } from '../data/spanishWords';
 import { AdaptiveEngine, KeyRecord } from '../lib/adaptive/adaptiveEngine';
 import { soundEngine } from '../lib/engine/soundEngine';
+
+/** Consistency from WPM series: 100 − coefficient of variation (%), clamped 0–100. */
+function calculateConsistency(series: number[]): number {
+  if (!series || series.length < 2) return 100;
+  const mean = series.reduce((a, b) => a + b, 0) / series.length;
+  if (mean <= 0) return 100;
+  const variance = series.reduce((acc, v) => acc + (v - mean) ** 2, 0) / series.length;
+  const std = Math.sqrt(variance);
+  return Math.max(0, Math.min(100, Math.round(100 - (std / mean) * 100)));
+}
 
 interface TypingState {
   settings: TestSettings;
@@ -35,9 +46,11 @@ interface TypingState {
   // Database and Auth State
   dbStatus: DbConnectionStatus;
   isAuthModalOpen: boolean;
+  isAchievementsModalOpen: boolean;
 
   // Actions
   setIsAuthModalOpen: (open: boolean) => void;
+  setIsAchievementsModalOpen: (open: boolean) => void;
   updateSettings: (newSettings: Partial<TestSettings>) => void;
   initTest: (customText?: string) => void;
   startTest: () => void;
@@ -51,6 +64,7 @@ interface TypingState {
   loginUser: (username: string, email?: string) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   checkDbConnection: () => Promise<void>;
+  resetAdaptiveProgress: () => void;
 }
 
 const DEFAULT_SETTINGS: TestSettings = {
@@ -79,6 +93,8 @@ const INITIAL_ACHIEVEMENTS: Achievement[] = [
 export const useTypingStore = create<TypingState>((set, get) => {
   let savedKeyStats: Record<string, KeyRecord> | undefined = undefined;
   let savedHistory: TestResult[] = [];
+  let savedSettings: TestSettings = { ...DEFAULT_SETTINGS };
+  let savedAchievements: Achievement[] = INITIAL_ACHIEVEMENTS.map((a) => ({ ...a }));
   let savedProfile: UserProfile = {
     id: 'guest',
     username: 'Mecanógrafo Invitado',
@@ -92,6 +108,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
     minutesToday: 0,
     isGuest: true
   };
+  /** Prevents double-recording the same finished test */
+  let isRecordingResult = false;
 
   try {
     const lsHistory = localStorage.getItem('typemaster_history');
@@ -102,11 +120,31 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     const lsKeyStats = localStorage.getItem('typemaster_keystats');
     if (lsKeyStats) savedKeyStats = JSON.parse(lsKeyStats);
+
+    const lsSettings = localStorage.getItem('typemaster_settings');
+    if (lsSettings) {
+      const parsed = JSON.parse(lsSettings);
+      savedSettings = { ...DEFAULT_SETTINGS, ...parsed };
+    }
+
+    const lsAchievements = localStorage.getItem('typemaster_achievements');
+    if (lsAchievements) {
+      const parsed: Achievement[] = JSON.parse(lsAchievements);
+      // Merge with INITIAL so new achievement definitions are kept
+      savedAchievements = INITIAL_ACHIEVEMENTS.map((def) => {
+        const found = parsed.find((p) => p.id === def.id);
+        return found ? { ...def, unlocked: !!found.unlocked, progress: found.progress, maxProgress: found.maxProgress } : { ...def };
+      });
+    }
   } catch (e) {
     // fallback
   }
 
   const adaptive = new AdaptiveEngine(savedKeyStats);
+
+  // Apply saved sound prefs on boot
+  soundEngine.setEnabled(savedSettings.soundEnabled);
+  soundEngine.setTheme(savedSettings.soundTheme);
 
   const generateText = (settings: TestSettings, adaptiveEngine: AdaptiveEngine): string => {
     if (settings.mode === 'adaptive') {
@@ -117,14 +155,17 @@ export const useTypingStore = create<TypingState>((set, get) => {
       const q = SPANISH_QUOTES[Math.floor(Math.random() * SPANISH_QUOTES.length)];
       return q;
     }
+    if (settings.mode === 'custom') {
+      return ''; // custom text is supplied via initTest(customText)
+    }
     const count = settings.wordsSubMode || 25;
     const shuffled = [...SPANISH_WORDS].sort(() => 0.5 - Math.random());
     let words = shuffled.slice(0, count);
 
     if (settings.includePunctuation) {
       words = words.map((w, i) => {
-        if (i > 0 && i % 4 === 0) return w + ',';
         if (i > 0 && i % 8 === 0) return w + '.';
+        if (i > 0 && i % 4 === 0) return w + ',';
         return w;
       });
     }
@@ -139,7 +180,16 @@ export const useTypingStore = create<TypingState>((set, get) => {
     return words.join(' ');
   };
 
-  const initialSettings = DEFAULT_SETTINGS;
+  const CONTENT_SETTING_KEYS: (keyof TestSettings)[] = [
+    'mode',
+    'timeSubMode',
+    'wordsSubMode',
+    'includePunctuation',
+    'includeNumbers',
+    'language',
+  ];
+
+  const initialSettings = savedSettings;
   const initialText = generateText(initialSettings, adaptive);
 
   return {
@@ -162,7 +212,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
     wpmSeries: [],
 
     profile: savedProfile,
-    achievements: INITIAL_ACHIEVEMENTS,
+    achievements: savedAchievements,
     testHistory: savedHistory,
     adaptiveEngine: adaptive,
     activeKey: null,
@@ -171,8 +221,10 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     dbStatus: 'checking',
     isAuthModalOpen: false,
+    isAchievementsModalOpen: false,
 
     setIsAuthModalOpen: (open: boolean) => set({ isAuthModalOpen: open }),
+    setIsAchievementsModalOpen: (open: boolean) => set({ isAchievementsModalOpen: open }),
 
     checkDbConnection: async () => {
       try {
@@ -187,6 +239,24 @@ export const useTypingStore = create<TypingState>((set, get) => {
         set({ dbStatus: 'offline' });
       } catch {
         set({ dbStatus: 'offline' });
+      }
+    },
+
+    resetAdaptiveProgress: () => {
+      const state = get();
+      state.adaptiveEngine.resetProgress();
+      try {
+        localStorage.setItem(
+          'typemaster_keystats',
+          JSON.stringify(state.adaptiveEngine.exportState().keyStats)
+        );
+      } catch {
+        // ignore
+      }
+      // Trigger subscribers (engine is mutated in place)
+      set({ adaptiveEngine: state.adaptiveEngine });
+      if (state.settings.mode === 'adaptive') {
+        get().initTest();
       }
     },
 
@@ -308,7 +378,24 @@ export const useTypingStore = create<TypingState>((set, get) => {
         const updated = { ...state.settings, ...newSettings };
         soundEngine.setEnabled(updated.soundEnabled);
         soundEngine.setTheme(updated.soundTheme);
-        const newText = generateText(updated, state.adaptiveEngine);
+
+        try {
+          localStorage.setItem('typemaster_settings', JSON.stringify(updated));
+        } catch {
+          // ignore quota / private mode
+        }
+
+        const shouldRegen = CONTENT_SETTING_KEYS.some((k) => k in newSettings);
+        if (!shouldRegen) {
+          return { settings: updated };
+        }
+
+        isRecordingResult = false;
+        const newText =
+          updated.mode === 'custom' && state.settings.mode === 'custom' && state.targetText
+            ? state.targetText
+            : generateText(updated, state.adaptiveEngine);
+
         return {
           settings: updated,
           targetText: newText,
@@ -321,16 +408,28 @@ export const useTypingStore = create<TypingState>((set, get) => {
           wpm: 0,
           rawWpm: 0,
           accuracy: 100,
+          consistency: 100,
+          charsCorrect: 0,
+          charsWrong: 0,
+          charsExtra: 0,
+          charsMissed: 0,
+          wpmSeries: [],
           activeKey: null,
           lastKeyError: false,
-          lastKeyTime: null
+          lastKeyTime: null,
         };
       });
     },
 
     initTest: (customText) => {
+      isRecordingResult = false;
       set((state) => {
-        const text = customText || generateText(state.settings, state.adaptiveEngine);
+        const text =
+          customText !== undefined
+            ? customText
+            : state.settings.mode === 'custom' && state.targetText
+              ? state.targetText
+              : generateText(state.settings, state.adaptiveEngine);
         return {
           status: 'idle',
           targetText: text,
@@ -350,7 +449,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
           wpmSeries: [],
           activeKey: null,
           lastKeyError: false,
-          lastKeyTime: null
+          lastKeyTime: null,
         };
       });
     },
@@ -425,10 +524,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
           latencyMs = Math.min(1000, Math.max(30, Math.round(now - currentState.lastKeyTime)));
         }
 
-        // Update adaptive engine if mode is adaptive
-        if (currentState.settings.mode === 'adaptive' && index < target.length) {
+        // Record letter stats in every mode so adaptive training benefits from all practice
+        if (index < target.length) {
           const expectedKey = target[index];
-          currentState.adaptiveEngine.recordKeyStroke(expectedKey, latencyMs, isError);
+          if (/[a-zñáéíóúüA-ZÑÁÉÍÓÚÜ]/.test(expectedKey)) {
+            currentState.adaptiveEngine.recordKeyStroke(expectedKey, latencyMs, isError);
+          }
         }
 
         // Check if words mode, quote mode, adaptive or custom mode is finished
@@ -518,32 +619,47 @@ export const useTypingStore = create<TypingState>((set, get) => {
     },
 
     finishTest: () => {
+      if (isRecordingResult) return;
+      isRecordingResult = true;
+
       const state = get();
-      if (state.status === 'finished' && state.startTime) {
-        // Already recorded
-      }
-      set({ status: 'finished' });
+      const consistency = calculateConsistency(state.wpmSeries);
+      // Untyped remaining characters when the timer ends (time mode)
+      const charsMissed = Math.max(0, state.targetText.length - state.currentIndex);
+
+      set({ status: 'finished', consistency, charsMissed });
 
       const result: TestResult = {
         id: 'test_' + Date.now(),
         userId: state.profile.id || 'guest',
         mode: state.settings.mode,
-        subMode: state.settings.mode === 'time' ? state.settings.timeSubMode : state.settings.wordsSubMode,
+        subMode:
+          state.settings.mode === 'time'
+            ? state.settings.timeSubMode
+            : state.settings.wordsSubMode,
         wpm: state.wpm,
         rawWpm: state.rawWpm,
         accuracy: state.accuracy,
-        consistency: state.consistency,
+        consistency,
         charsCorrect: state.charsCorrect,
         charsWrong: state.charsWrong,
         charsExtra: state.charsExtra,
-        charsMissed: state.charsMissed,
+        charsMissed,
         durationSeconds: Math.max(1, state.elapsedSeconds || 1),
         wpmSeries: state.wpmSeries,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       };
 
+      const previousBestWpm =
+        state.testHistory.length > 0
+          ? Math.max(...state.testHistory.map((t) => t.wpm))
+          : 0;
+      const isPersonalBest = state.wpm > previousBestWpm && state.wpm > 0;
+
       const newHistory = [result, ...state.testHistory];
-      const xpEarned = Math.round(state.wpm * 2 + state.accuracy * 0.5 + (state.charsCorrect / 5));
+      const xpEarned = Math.round(
+        state.wpm * 2 + state.accuracy * 0.5 + state.charsCorrect / 5
+      );
       const newXp = state.profile.xp + xpEarned;
       const newLevel = Math.floor(newXp / 500) + 1;
 
@@ -551,57 +667,96 @@ export const useTypingStore = create<TypingState>((set, get) => {
         ...state.profile,
         xp: newXp,
         level: newLevel,
-        minutesToday: state.profile.minutesToday + Math.ceil(state.elapsedSeconds / 60)
+        minutesToday:
+          state.profile.minutesToday + Math.ceil(state.elapsedSeconds / 60),
       };
 
-      // Check achievements
+      // Check achievements and track newly unlocked
+      const newlyUnlocked: string[] = [];
       const updatedAchievements = state.achievements.map((ach) => {
-        if (ach.id === 'first_test') return { ...ach, unlocked: true };
-        if (ach.id === 'wpm_50' && state.wpm >= 50) return { ...ach, unlocked: true };
-        if (ach.id === 'wpm_80' && state.wpm >= 80) return { ...ach, unlocked: true };
-        if (ach.id === 'accuracy_100' && state.accuracy === 100 && state.charsCorrect >= 20) return { ...ach, unlocked: true };
+        if (ach.unlocked) return ach;
+        let unlock = false;
+        if (ach.id === 'first_test') unlock = true;
+        if (ach.id === 'wpm_50' && state.wpm >= 50) unlock = true;
+        if (ach.id === 'wpm_80' && state.wpm >= 80) unlock = true;
+        if (
+          ach.id === 'accuracy_100' &&
+          state.accuracy === 100 &&
+          state.charsCorrect >= 20
+        ) {
+          unlock = true;
+        }
+        if (ach.id === 'streak_3' && state.profile.streak >= 3) unlock = true;
+        if (unlock) {
+          newlyUnlocked.push(ach.id);
+          return { ...ach, unlocked: true };
+        }
         return ach;
       });
 
       set({
         testHistory: newHistory,
         profile: newProfile,
-        achievements: updatedAchievements
+        achievements: updatedAchievements,
       });
+
+      // Celebrate personal best or new achievement
+      if (isPersonalBest || newlyUnlocked.length > 0) {
+        try {
+          confetti({
+            particleCount: isPersonalBest ? 120 : 70,
+            spread: 70,
+            origin: { y: 0.65 },
+            colors: ['#f59e0b', '#6366f1', '#10b981', '#f43f5e'],
+          });
+        } catch {
+          // confetti optional
+        }
+      }
 
       try {
         localStorage.setItem('typemaster_history', JSON.stringify(newHistory));
         localStorage.setItem('typemaster_profile', JSON.stringify(newProfile));
-        localStorage.setItem('typemaster_keystats', JSON.stringify(state.adaptiveEngine.exportState().keyStats));
+        localStorage.setItem(
+          'typemaster_keystats',
+          JSON.stringify(state.adaptiveEngine.exportState().keyStats)
+        );
+        localStorage.setItem(
+          'typemaster_achievements',
+          JSON.stringify(updatedAchievements)
+        );
 
-        // Sync with backend API (Neon Database)
         fetch('/api/tests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(result)
+          body: JSON.stringify(result),
         })
-        .then(async (res) => {
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            console.error('[TypeMaster] Error guardando test en servidor/Neon:', err);
-          } else {
-            console.log('[TypeMaster] Test guardado con éxito en Neon Database');
-            set({ dbStatus: 'connected' });
-          }
-        })
-        .catch((err) => {
-          console.warn('[TypeMaster] Backend no alcanzable para persistir test:', err);
-        });
+          .then(async (res) => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              console.error(
+                '[TypeMaster] Error guardando test en servidor/Neon:',
+                err
+              );
+            } else {
+              set({ dbStatus: 'connected' });
+            }
+          })
+          .catch((err) => {
+            console.warn(
+              '[TypeMaster] Backend no alcanzable para persistir test:',
+              err
+            );
+          });
 
-        // Sync user profile
         fetch(`/api/user?id=${encodeURIComponent(newProfile.id)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newProfile)
+          body: JSON.stringify(newProfile),
         }).catch(() => {});
       } catch (e) {
         console.error('[TypeMaster] Error en almacenamiento:', e);
       }
-    }
+    },
   };
 });
