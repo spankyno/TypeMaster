@@ -21,19 +21,42 @@ export const TypingArea: React.FC = () => {
     backspace,
     initTest,
     tickTimer,
-    adaptiveEngine
+    adaptiveEngine,
+    isAuthModalOpen
   } = useTypingStore();
 
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus hidden input on mount and click
+  const isAnyModalOpen = isAuthModalOpen || isCustomModalOpen;
+
+  // Focus hidden input on mount and click ONLY when not inside modal or another input
   useEffect(() => {
-    const focusInput = () => inputRef.current?.focus();
-    focusInput();
+    const focusInput = (e?: MouseEvent) => {
+      if (isAnyModalOpen) return;
+
+      if (e) {
+        const target = e.target as HTMLElement | null;
+        if (target && target.closest('input, textarea, select, button, [role="dialog"]')) {
+          return;
+        }
+      }
+
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      inputRef.current?.focus();
+    };
+
+    if (!isAnyModalOpen) {
+      focusInput();
+    }
+
     window.addEventListener('click', focusInput);
     return () => window.removeEventListener('click', focusInput);
-  }, []);
+  }, [isAnyModalOpen]);
 
   // Timer interval for time mode
   useEffect(() => {
@@ -49,6 +72,13 @@ export const TypingArea: React.FC = () => {
   // Keyboard shortcut listener (Tab = restart, Enter when finished = next test, Esc = restart)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isAnyModalOpen) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
       if (e.key === 'Tab') {
         e.preventDefault();
         initTest();
@@ -62,9 +92,11 @@ export const TypingArea: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [initTest, status]);
+  }, [initTest, status, isAnyModalOpen]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isAnyModalOpen) return;
+
     if (e.key === 'Backspace') {
       e.preventDefault();
       backspace();
@@ -85,10 +117,11 @@ export const TypingArea: React.FC = () => {
         type="text"
         className="opacity-0 absolute w-0 h-0 pointer-events-none"
         onKeyDown={handleInputKeyDown}
-        autoFocus
+        autoFocus={!isAnyModalOpen}
         autoComplete="off"
         autoCapitalize="off"
         spellCheck="false"
+        disabled={isAnyModalOpen}
       />
 
       {/* Results View if Finished */}
@@ -96,7 +129,7 @@ export const TypingArea: React.FC = () => {
         <TestResultModal onRetry={() => initTest()} onNextTest={() => initTest()} />
       ) : (
         <div className="w-full flex flex-col items-center gap-8">
-          {/* Mode Selector Toolbar (hidden or dimmed when running) */}
+          {/* Mode Selector Toolbar */}
           <div className={`transition-opacity duration-300 flex flex-wrap items-center justify-center gap-3 bg-neutral-100 dark:bg-neutral-900/80 backdrop-blur-md p-2 rounded-2xl border border-neutral-200 dark:border-neutral-800 ${
             status === 'running' ? 'opacity-20 hover:opacity-100' : 'opacity-100'
           }`}>
@@ -193,10 +226,14 @@ export const TypingArea: React.FC = () => {
             )}
           </div>
 
-          {/* Main Text Display (Monkeytype Style) */}
+          {/* Main Text Display */}
           <div 
             className="w-full bg-white dark:bg-neutral-900/40 p-8 md:p-12 rounded-3xl border border-neutral-200 dark:border-neutral-800/80 shadow-sm relative overflow-hidden select-none cursor-text min-h-[220px] flex items-center"
-            onClick={() => inputRef.current?.focus()}
+            onClick={() => {
+              if (!isAnyModalOpen) {
+                inputRef.current?.focus();
+              }
+            }}
           >
             <div className="font-mono text-2xl md:text-3xl leading-relaxed tracking-wide flex flex-wrap gap-y-3 whitespace-pre">
               {targetText.split('').map((char, idx) => {
@@ -258,4 +295,3 @@ export const TypingArea: React.FC = () => {
     </div>
   );
 };
-
