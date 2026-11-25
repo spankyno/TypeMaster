@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { fetchUser, saveUser, fetchTests, insertTest } from './src/lib/db.js';
+import { fetchUser, saveUser, fetchTests, insertTest, findOrCreateUser, testConnection } from './api/_db.js';
 
 dotenv.config();
 
@@ -15,13 +15,37 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // API Routes
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const dbCheck = await testConnection();
   res.json({
     status: 'ok',
     service: 'TypeMaster Local Dev Server',
-    database: process.env.DATABASE_URL ? 'Neon Postgres Connected' : 'In-Memory Fallback',
+    database: {
+      configured: Boolean(process.env.DATABASE_URL),
+      status: dbCheck.status,
+      connected: dbCheck.connected,
+      error: dbCheck.error || null,
+    },
     timestamp: new Date().toISOString(),
   });
+});
+
+app.post('/api/auth', async (req, res) => {
+  try {
+    const username = (req.body?.username || '').trim();
+    const email = (req.body?.email || '').trim();
+
+    if (!username) {
+      return res.status(400).json({ error: 'El nombre de usuario o alias es obligatorio' });
+    }
+
+    const user = await findOrCreateUser(username, email);
+    const tests = await fetchTests(user.id);
+
+    res.json({ success: true, user, tests });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Error en autenticación' });
+  }
 });
 
 app.get('/api/user/:id', async (req, res) => {
@@ -33,10 +57,31 @@ app.get('/api/user/:id', async (req, res) => {
   }
 });
 
+app.get('/api/user', async (req, res) => {
+  try {
+    const userId = (req.query.id as string) || (req.query.userId as string) || 'guest';
+    const user = await fetchUser(userId);
+    res.json(user);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Error fetching user' });
+  }
+});
+
 app.post('/api/user/:id', async (req, res) => {
   try {
     await saveUser({ ...req.body, id: req.params.id });
     const user = await fetchUser(req.params.id);
+    res.json({ success: true, user });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Error saving user' });
+  }
+});
+
+app.post('/api/user', async (req, res) => {
+  try {
+    const userId = (req.body.id as string) || 'guest';
+    await saveUser({ ...req.body, id: userId });
+    const user = await fetchUser(userId);
     res.json({ success: true, user });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'Error saving user' });
@@ -63,7 +108,7 @@ app.get('/api/tests/:userId', async (req, res) => {
 
 app.get('/api/tests', async (req, res) => {
   try {
-    const userId = (req.query.userId as string) || 'guest';
+    const userId = (req.query.userId as string) || (req.query.id as string) || 'guest';
     const tests = await fetchTests(userId);
     res.json(tests);
   } catch (error: any) {
@@ -96,7 +141,7 @@ async function startServer() {
     if (process.env.DATABASE_URL) {
       console.log('Database: Neon PostgreSQL active');
     } else {
-      console.log('Database: In-Memory / Local fallback active');
+      console.log('Database: In-Memory / Local fallback active (Configura DATABASE_URL para conectar a Neon)');
     }
   });
 }

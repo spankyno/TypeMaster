@@ -4,14 +4,16 @@ import { TypingArea } from './components/TypingArea';
 import { StatsView } from './components/StatsView';
 import { AdaptiveView } from './components/AdaptiveView';
 import { AchievementsModal } from './components/AchievementsModal';
+import { AuthModal } from './components/AuthModal';
 import { DesktopWarning } from './components/DesktopWarning';
 import { useTypingStore } from './store/useTypingStore';
+import { Database } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'test' | 'stats' | 'adaptive' | 'settings'>('test');
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState<boolean>(false);
-  const { loadSavedData } = useTypingStore();
+  const { loadSavedData, isAuthModalOpen, setIsAuthModalOpen, dbStatus } = useTypingStore();
 
   useEffect(() => {
     loadSavedData();
@@ -34,6 +36,7 @@ export default function App() {
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           onOpenAchievements={() => setIsAchievementsOpen(true)}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
         />
 
         <main className="w-full">
@@ -48,11 +51,32 @@ export default function App() {
         onClose={() => setIsAchievementsOpen(false)}
       />
 
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
+
       <DesktopWarning />
 
-      <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-neutral-200 dark:border-neutral-900 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500">
+      <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-neutral-200 dark:border-neutral-900 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-3">
         <div>TypeMaster Pro • Alta velocidad y precisión de tecleo</div>
-        <div className="flex items-center gap-4 mt-2 sm:mt-0">
+        
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center gap-1.5 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
+            title="Ver estado de base de datos"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>
+              Neon DB: {dbStatus === 'connected' ? (
+                <strong className="text-emerald-500">Conectada</strong>
+              ) : (
+                <strong className="text-amber-500">Modo Local</strong>
+              )}
+            </span>
+          </button>
+          <span>•</span>
           <span>Diseño optimizado para escritorio (QWERTY ES)</span>
         </div>
       </footer>

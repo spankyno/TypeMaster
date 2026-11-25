@@ -1,7 +1,6 @@
-import { fetchUser, saveUser } from '../src/lib/db';
+import { fetchUser, saveUser } from './_db.js';
 
 export default async function handler(req: any, res: any) {
-  // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -19,8 +18,20 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      await saveUser({ ...body, id: body.id || userId });
+      let body = req.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch {}
+      } else if (!body && typeof req.on === 'function') {
+        body = await new Promise((resolve) => {
+          let str = '';
+          req.on('data', (c: any) => { str += c; });
+          req.on('end', () => {
+            try { resolve(JSON.parse(str)); } catch { resolve({}); }
+          });
+        });
+      }
+
+      await saveUser({ ...body, id: body?.id || userId });
       const updated = await fetchUser(userId);
       return res.status(200).json({ success: true, user: updated });
     }

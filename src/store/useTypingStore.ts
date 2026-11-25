@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { TestSettings, TestResult, UserProfile, Achievement } from '../types';
+import { TestSettings, TestResult, UserProfile, Achievement, DbConnectionStatus } from '../types';
 import { SPANISH_WORDS, SPANISH_QUOTES } from '../data/spanishWords';
 import { AdaptiveEngine, KeyRecord } from '../lib/adaptive/adaptiveEngine';
 import { soundEngine } from '../lib/engine/soundEngine';
@@ -32,7 +32,12 @@ interface TypingState {
   lastKeyError: boolean;
   lastKeyTime: number | null;
 
+  // Database and Auth State
+  dbStatus: DbConnectionStatus;
+  isAuthModalOpen: boolean;
+
   // Actions
+  setIsAuthModalOpen: (open: boolean) => void;
   updateSettings: (newSettings: Partial<TestSettings>) => void;
   initTest: (customText?: string) => void;
   startTest: () => void;
@@ -42,7 +47,10 @@ interface TypingState {
   backspace: () => void;
   tickTimer: () => void;
   finishTest: () => void;
-  loadSavedData: () => void;
+  loadSavedData: () => Promise<void>;
+  loginUser: (username: string, email?: string) => Promise<{ success: boolean; error?: string }>;
+  logoutUser: () => void;
+  checkDbConnection: () => Promise<void>;
 }
 
 const DEFAULT_SETTINGS: TestSettings = {
@@ -69,20 +77,20 @@ const INITIAL_ACHIEVEMENTS: Achievement[] = [
 ];
 
 export const useTypingStore = create<TypingState>((set, get) => {
-  // Load saved adaptive data & history from localStorage if available
   let savedKeyStats: Record<string, KeyRecord> | undefined = undefined;
   let savedHistory: TestResult[] = [];
   let savedProfile: UserProfile = {
     id: 'guest',
     username: 'Mecanógrafo Invitado',
-    email: '',
+    email: 'guest@typemaster.pro',
     xp: 0,
     level: 1,
     streak: 1,
     maxStreak: 1,
     lastActiveDate: new Date().toISOString().split('T')[0],
     dailyGoalMinutes: 10,
-    minutesToday: 0
+    minutesToday: 0,
+    isGuest: true
   };
 
   try {
@@ -100,7 +108,6 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
   const adaptive = new AdaptiveEngine(savedKeyStats);
 
-  // Generate initial target text
   const generateText = (settings: TestSettings, adaptiveEngine: AdaptiveEngine): string => {
     if (settings.mode === 'adaptive') {
       const count = settings.wordsSubMode || 25;
@@ -110,32 +117,26 @@ export const useTypingStore = create<TypingState>((set, get) => {
       const q = SPANISH_QUOTES[Math.floor(Math.random() * SPANISH_QUOTES.length)];
       return q;
     }
-    if (settings.mode === 'words') {
-      const count = settings.wordsSubMode;
-      const words: string[] = [];
-      for (let i = 0; i < count; i++) {
-        let w = SPANISH_WORDS[Math.floor(Math.random() * SPANISH_WORDS.length)];
-        if (settings.includePunctuation && Math.random() < 0.2) {
-          w = w + (Math.random() < 0.5 ? ',' : '.');
-        }
-        words.push(w);
-      }
-      return words.join(' ');
+    const count = settings.wordsSubMode || 25;
+    const shuffled = [...SPANISH_WORDS].sort(() => 0.5 - Math.random());
+    let words = shuffled.slice(0, count);
+
+    if (settings.includePunctuation) {
+      words = words.map((w, i) => {
+        if (i > 0 && i % 4 === 0) return w + ',';
+        if (i > 0 && i % 8 === 0) return w + '.';
+        return w;
+      });
     }
-    if (settings.mode === 'time') {
-      // Generate enough words for 120s (~100-150 words)
-      const words: string[] = [];
-      for (let i = 0; i < 120; i++) {
-        let w = SPANISH_WORDS[Math.floor(Math.random() * SPANISH_WORDS.length)];
-        if (settings.includePunctuation && Math.random() < 0.15) {
-          w = w + (Math.random() < 0.5 ? ',' : '.');
-        }
-        words.push(w);
-      }
-      return words.join(' ');
+
+    if (settings.includeNumbers) {
+      words = words.map((w, i) => {
+        if (i % 6 === 0) return `${Math.floor(Math.random() * 90) + 10}`;
+        return w;
+      });
     }
-    // Zen or custom
-    return SPANISH_WORDS.slice(0, 30).join(' ');
+
+    return words.join(' ');
   };
 
   const initialSettings = DEFAULT_SETTINGS;
@@ -168,16 +169,42 @@ export const useTypingStore = create<TypingState>((set, get) => {
     lastKeyError: false,
     lastKeyTime: null,
 
-    loadSavedData: async () => {
+    dbStatus: 'checking',
+    isAuthModalOpen: false,
+
+    setIsAuthModalOpen: (open: boolean) => set({ isAuthModalOpen: open }),
+
+    checkDbConnection: async () => {
       try {
-        const testsRes = await fetch('/api/tests?userId=guest');
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.database?.connected) {
+            set({ dbStatus: 'connected' });
+            return;
+          }
+        }
+        set({ dbStatus: 'offline' });
+      } catch {
+        set({ dbStatus: 'offline' });
+      }
+    },
+
+    loadSavedData: async () => {
+      const state = get();
+      state.checkDbConnection();
+
+      try {
+        const userId = state.profile.id || 'guest';
+        // Cargar tests desde la base de datos (Neon)
+        const testsRes = await fetch(`/api/tests?userId=${encodeURIComponent(userId)}`);
         if (testsRes.ok) {
           const apiTests = await testsRes.json();
           if (Array.isArray(apiTests) && apiTests.length > 0) {
-            set((state) => {
-              const existingIds = new Set(state.testHistory.map((t) => t.id));
+            set((currentState) => {
+              const existingIds = new Set(currentState.testHistory.map((t) => t.id));
               const newTests = apiTests.filter((t: TestResult) => !existingIds.has(t.id));
-              const merged = [...state.testHistory, ...newTests].sort(
+              const merged = [...currentState.testHistory, ...newTests].sort(
                 (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
               );
               localStorage.setItem('typemaster_history', JSON.stringify(merged));
@@ -186,16 +213,17 @@ export const useTypingStore = create<TypingState>((set, get) => {
           }
         }
 
-        const userRes = await fetch('/api/user?id=guest');
+        // Cargar usuario desde la base de datos (Neon)
+        const userRes = await fetch(`/api/user?id=${encodeURIComponent(userId)}`);
         if (userRes.ok) {
           const apiUser = await userRes.json();
           if (apiUser && apiUser.id) {
-            set((state) => {
+            set((currentState) => {
               const updatedProfile = {
-                ...state.profile,
+                ...currentState.profile,
                 ...apiUser,
-                xp: Math.max(state.profile.xp, apiUser.xp || 0),
-                level: Math.max(state.profile.level, apiUser.level || 1),
+                xp: Math.max(currentState.profile.xp, apiUser.xp || 0),
+                level: Math.max(currentState.profile.level, apiUser.level || 1),
               };
               localStorage.setItem('typemaster_profile', JSON.stringify(updatedProfile));
               return { profile: updatedProfile };
@@ -203,8 +231,76 @@ export const useTypingStore = create<TypingState>((set, get) => {
           }
         }
       } catch (e) {
-        // Fallback silently if offline or API not ready
+        // Fallback local
       }
+    },
+
+    loginUser: async (username: string, email: string = '') => {
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Error al iniciar sesión' };
+        }
+
+        const user: UserProfile = { ...data.user, isGuest: false };
+        const tests: TestResult[] = Array.isArray(data.tests) ? data.tests : [];
+
+        set({
+          profile: user,
+          testHistory: tests,
+          dbStatus: 'connected'
+        });
+
+        localStorage.setItem('typemaster_profile', JSON.stringify(user));
+        localStorage.setItem('typemaster_history', JSON.stringify(tests));
+
+        return { success: true };
+      } catch (err: any) {
+        // Fallback local en caso de que esté offline
+        const localId = 'usr_' + username.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const localProfile: UserProfile = {
+          id: localId,
+          username: username.trim(),
+          email: email.trim(),
+          xp: 0,
+          level: 1,
+          streak: 1,
+          maxStreak: 1,
+          lastActiveDate: new Date().toISOString().split('T')[0],
+          dailyGoalMinutes: 10,
+          minutesToday: 0,
+          isGuest: false
+        };
+
+        set({ profile: localProfile, dbStatus: 'offline' });
+        localStorage.setItem('typemaster_profile', JSON.stringify(localProfile));
+
+        return { success: true };
+      }
+    },
+
+    logoutUser: () => {
+      const guestUser: UserProfile = {
+        id: 'guest',
+        username: 'Mecanógrafo Invitado',
+        email: 'guest@typemaster.pro',
+        xp: 0,
+        level: 1,
+        streak: 1,
+        maxStreak: 1,
+        lastActiveDate: new Date().toISOString().split('T')[0],
+        dailyGoalMinutes: 10,
+        minutesToday: 0,
+        isGuest: true
+      };
+      set({ profile: guestUser, testHistory: [] });
+      localStorage.setItem('typemaster_profile', JSON.stringify(guestUser));
+      localStorage.setItem('typemaster_history', JSON.stringify([]));
     },
 
     updateSettings: (newSettings) => {
@@ -224,7 +320,10 @@ export const useTypingStore = create<TypingState>((set, get) => {
           timeRemaining: updated.timeSubMode,
           wpm: 0,
           rawWpm: 0,
-          accuracy: 100
+          accuracy: 100,
+          activeKey: null,
+          lastKeyError: false,
+          lastKeyTime: null
         };
       });
     },
@@ -421,12 +520,13 @@ export const useTypingStore = create<TypingState>((set, get) => {
     finishTest: () => {
       const state = get();
       if (state.status === 'finished' && state.startTime) {
-        // Already recorded or triggered
+        // Already recorded
       }
       set({ status: 'finished' });
 
       const result: TestResult = {
         id: 'test_' + Date.now(),
+        userId: state.profile.id || 'guest',
         mode: state.settings.mode,
         subMode: state.settings.mode === 'time' ? state.settings.timeSubMode : state.settings.wordsSubMode,
         wpm: state.wpm,
@@ -437,7 +537,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
         charsWrong: state.charsWrong,
         charsExtra: state.charsExtra,
         charsMissed: state.charsMissed,
-        durationSeconds: state.elapsedSeconds || 1,
+        durationSeconds: Math.max(1, state.elapsedSeconds || 1),
         wpmSeries: state.wpmSeries,
         createdAt: new Date().toISOString()
       };
@@ -474,20 +574,33 @@ export const useTypingStore = create<TypingState>((set, get) => {
         localStorage.setItem('typemaster_profile', JSON.stringify(newProfile));
         localStorage.setItem('typemaster_keystats', JSON.stringify(state.adaptiveEngine.exportState().keyStats));
 
-        // Sync with backend API
+        // Sync with backend API (Neon Database)
         fetch('/api/tests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(result)
-        }).catch(() => {});
+        })
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error('[TypeMaster] Error guardando test en servidor/Neon:', err);
+          } else {
+            console.log('[TypeMaster] Test guardado con éxito en Neon Database');
+            set({ dbStatus: 'connected' });
+          }
+        })
+        .catch((err) => {
+          console.warn('[TypeMaster] Backend no alcanzable para persistir test:', err);
+        });
 
-        fetch('/api/user?id=guest', {
+        // Sync user profile
+        fetch(`/api/user?id=${encodeURIComponent(newProfile.id)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newProfile)
         }).catch(() => {});
       } catch (e) {
-        // ignore
+        console.error('[TypeMaster] Error en almacenamiento:', e);
       }
     }
   };

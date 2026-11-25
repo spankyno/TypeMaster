@@ -29,6 +29,7 @@ export interface KeyStats {
 
 export interface TestResult {
   id: string;
+  userId?: string;
   mode: string;
   subMode: string | number;
   wpm: number;
@@ -55,6 +56,7 @@ export interface UserProfile {
   lastActiveDate: string;
   dailyGoalMinutes: number;
   minutesToday: number;
+  isGuest?: boolean;
 }
 
 export interface Achievement {
@@ -66,3 +68,5 @@ export interface Achievement {
   progress?: number;
   maxProgress?: number;
 }
+
+export type DbConnectionStatus = 'connected' | 'offline' | 'checking' | 'error';
