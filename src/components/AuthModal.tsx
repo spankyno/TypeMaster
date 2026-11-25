@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { useTypingStore } from '../store/useTypingStore';
-import { User, LogIn, LogOut, CheckCircle2, AlertCircle, Database, RefreshCw, X, Shield, Sparkles } from 'lucide-react';
+import {
+  User,
+  LogIn,
+  LogOut,
+  AlertCircle,
+  Database,
+  RefreshCw,
+  X,
+  UserPlus,
+} from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -8,34 +17,63 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { profile, loginUser, logoutUser, dbStatus, checkDbConnection, testHistory } = useTypingStore();
+  const {
+    profile,
+    loginUser,
+    registerUser,
+    logoutUser,
+    dbStatus,
+    checkDbConnection,
+    testHistory,
+  } = useTypingStore();
+
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [testingDb, setTestingDb] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const isGuest = profile.id === 'guest' || profile.isGuest;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setError('Por favor, introduce tu nombre de usuario o alias.');
-      return;
+    setError(null);
+    setLoading(true);
+
+    let res: { success: boolean; error?: string };
+    if (mode === 'login') {
+      if (!email.trim() || !password) {
+        setError('Correo y contraseña son obligatorios.');
+        setLoading(false);
+        return;
+      }
+      res = await loginUser(email.trim(), password);
+    } else {
+      if (!username.trim() || !email.trim() || !password) {
+        setError('Completa todos los campos.');
+        setLoading(false);
+        return;
+      }
+      if (password.length < 6) {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+        setLoading(false);
+        return;
+      }
+      res = await registerUser(username.trim(), email.trim(), password);
     }
 
-    setLoading(true);
-    setError(null);
-
-    const res = await loginUser(username.trim(), email.trim());
     setLoading(false);
-
     if (res.success) {
       setUsername('');
       setEmail('');
+      setPassword('');
       onClose();
     } else {
-      setError(res.error || 'No se pudo iniciar sesión. Verifica tu conexión.');
+      setError(res.error || 'No se pudo completar la operación.');
     }
   };
 
@@ -50,8 +88,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setTestingDb(false);
   };
 
-  const isGuest = profile.id === 'guest' || profile.isGuest;
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
@@ -61,103 +97,118 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 p-8 shadow-2xl relative"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
         <button
           onClick={onClose}
           className="absolute top-6 right-6 p-2 rounded-xl text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
-          title="Cerrar ventana"
+          title="Cerrar"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
             <User className="w-6 h-6" />
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">
-              {isGuest ? 'Identificación de Usuario' : 'Perfil de Usuario'}
+              {isGuest ? (mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta') : 'Perfil de Usuario'}
             </h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               {isGuest
-                ? 'Inicia sesión para guardar tu progreso en Neon PostgreSQL'
-                : 'Sesión activa y sincronizada'}
+                ? 'Email + contraseña · sincronización en Neon PostgreSQL'
+                : 'Sesión activa'}
             </p>
           </div>
         </div>
 
-        {/* Database Status Pill */}
+        {/* DB status */}
         <div className="mb-6 p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs bg-neutral-50 dark:bg-neutral-800/40 border-neutral-200 dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
             <Database className="w-4 h-4 text-neutral-500" />
             <div>
-              <div className="font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-                Base de Datos Neon:
+              <div className="font-semibold text-neutral-900 dark:text-neutral-100">
+                Neon DB:{' '}
                 {dbStatus === 'connected' && (
-                  <span className="text-emerald-500 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Conectada
-                  </span>
+                  <span className="text-emerald-500">Conectada</span>
                 )}
                 {dbStatus === 'checking' && (
-                  <span className="text-amber-500 font-medium">Verificando...</span>
+                  <span className="text-amber-500">Verificando...</span>
                 )}
                 {dbStatus === 'offline' && (
-                  <span className="text-neutral-400 font-medium">Modo Local / Esperando DATABASE_URL</span>
+                  <span className="text-neutral-400">Modo local</span>
                 )}
                 {dbStatus === 'error' && (
-                  <span className="text-rose-500 font-bold">Error de conexión</span>
+                  <span className="text-rose-500">Error</span>
                 )}
               </div>
               <div className="text-[11px] text-neutral-400 mt-0.5">
-                {dbStatus === 'connected'
-                  ? 'Tus tests y nivel se guardan en la nube Neon'
-                  : 'Se guardan en el navegador hasta que configures DATABASE_URL'}
+                {isGuest
+                  ? 'Los invitados solo guardan datos en este navegador'
+                  : 'Tu historial se sincroniza en la nube'}
               </div>
             </div>
           </div>
-
           <button
             onClick={handleTestDb}
             disabled={testingDb}
             className="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 transition-colors"
-            title="Comprobar conexión con Neon"
+            title="Comprobar conexión"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${testingDb ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
         {isGuest ? (
-          /* Login / Registration Form */
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                Nombre de Usuario o Alias <span className="text-amber-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ejemplo: carlos_pro, marta, dev_typing"
-                className="w-full px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
-                autoFocus
-                required
-              />
-              <p className="text-[11px] text-neutral-400 mt-1">
-                Si el usuario ya existe en Neon, se cargará su historial y nivel. Si no existe, se creará uno nuevo automáticamente.
-              </p>
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  Nombre de usuario <span className="text-amber-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Tu alias público"
+                  className="w-full px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                Correo Electrónico <span className="text-neutral-400 font-normal">(Opcional)</span>
+                Correo electrónico <span className="text-amber-500">*</span>
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@email.com"
-                className="w-full px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+                className="w-full px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                autoComplete="email"
+                autoFocus
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                Contraseña <span className="text-amber-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === 'register' ? 'Mínimo 6 caracteres' : 'Tu contraseña'}
+                className="w-full px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                required
+                minLength={6}
               />
             </div>
 
@@ -168,31 +219,56 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                type="submit"
-                disabled={loading || !username.trim()}
-                className="w-full py-3.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-neutral-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
-              >
-                {loading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <LogIn className="w-4 h-4" />
-                )}
-                <span>Acceder / Crear Perfil</span>
-              </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-neutral-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+            >
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : mode === 'login' ? (
+                <LogIn className="w-4 h-4" />
+              ) : (
+                <UserPlus className="w-4 h-4" />
+              )}
+              <span>{mode === 'login' ? 'Entrar' : 'Crear cuenta'}</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-2.5 text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
-              >
-                Continuar como Invitado
-              </button>
+            <div className="text-center text-xs text-neutral-500">
+              {mode === 'login' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setError(null);
+                  }}
+                  className="hover:text-amber-500 transition-colors"
+                >
+                  ¿No tienes cuenta? Regístrate
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setError(null);
+                  }}
+                  className="hover:text-amber-500 transition-colors"
+                >
+                  ¿Ya tienes cuenta? Inicia sesión
+                </button>
+              )}
             </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-2.5 text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            >
+              Continuar como invitado
+            </button>
           </form>
         ) : (
-          /* Logged In Profile Details */
           <div className="space-y-6">
             <div className="p-5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700/80">
               <div className="flex items-center gap-3 mb-4">
@@ -200,48 +276,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   {profile.username.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-neutral-900 dark:text-white">
+                  <div className="font-bold text-neutral-900 dark:text-white">
                     {profile.username}
-                  </h3>
-                  <div className="flex items-center gap-2 text-xs text-neutral-500">
-                    <span className="font-mono">{profile.id}</span>
-                    {profile.email && <span>• {profile.email}</span>}
                   </div>
+                  <div className="text-xs text-neutral-500">{profile.email}</div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-neutral-200 dark:border-neutral-700/60 text-center">
+              <div className="grid grid-cols-3 gap-3 text-center text-xs">
                 <div>
-                  <div className="text-[10px] uppercase font-bold text-neutral-400">Nivel</div>
-                  <div className="text-lg font-black text-amber-500">{profile.level}</div>
+                  <div className="font-black text-lg text-amber-500">{profile.level}</div>
+                  <div className="text-neutral-500">Nivel</div>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase font-bold text-neutral-400">XP Total</div>
-                  <div className="text-lg font-black text-neutral-900 dark:text-white">{profile.xp}</div>
+                  <div className="font-black text-lg text-indigo-500">{profile.xp}</div>
+                  <div className="text-neutral-500">XP</div>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase font-bold text-neutral-400">Tests</div>
-                  <div className="text-lg font-black text-neutral-900 dark:text-white">{testHistory.length}</div>
+                  <div className="font-black text-lg text-emerald-500">{testHistory.length}</div>
+                  <div className="text-neutral-500">Tests</div>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={handleLogout}
-                className="flex-1 py-3 px-4 rounded-2xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold text-xs transition-colors flex items-center justify-center gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Cerrar Sesión
-              </button>
-
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
-              >
-                Continuar Practicando
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 hover:bg-rose-500/10 text-neutral-700 dark:text-neutral-300 hover:text-rose-500 font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Cerrar sesión
+            </button>
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import { AdaptiveView } from './components/AdaptiveView';
 import { AchievementsModal } from './components/AchievementsModal';
 import { AuthModal } from './components/AuthModal';
 import { DesktopWarning } from './components/DesktopWarning';
+import { AboutView } from './components/AboutView';
 import { useTypingStore } from './store/useTypingStore';
 import { Database } from 'lucide-react';
 
@@ -20,7 +21,7 @@ function loadDarkMode(): boolean {
 }
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'test' | 'stats' | 'adaptive' | 'settings'>('test');
+  const [currentTab, setCurrentTab] = useState<'test' | 'stats' | 'adaptive' | 'about'>('test');
   const [darkMode, setDarkMode] = useState<boolean>(loadDarkMode);
   const {
     loadSavedData,
@@ -64,6 +65,7 @@ export default function App() {
           {currentTab === 'test' && <TypingArea />}
           {currentTab === 'stats' && <StatsView />}
           {currentTab === 'adaptive' && <AdaptiveView />}
+          {currentTab === 'about' && <AboutView />}
         </main>
       </div>
 
@@ -80,7 +82,7 @@ export default function App() {
       <DesktopWarning />
 
       <footer className="w-full max-w-6xl mx-auto px-6 py-6 border-t border-neutral-200 dark:border-neutral-900 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-3">
-        <div>TypeMaster Pro • Alta velocidad y precisión de tecleo</div>
+        <div>TypeMaster Pro • Autor: Aitor Sánchez Gutiérrez © 2026</div>
 
         <div className="flex items-center gap-4">
           <button

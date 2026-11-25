@@ -61,10 +61,19 @@ interface TypingState {
   tickTimer: () => void;
   finishTest: () => void;
   loadSavedData: () => Promise<void>;
-  loginUser: (username: string, email?: string) => Promise<{ success: boolean; error?: string }>;
+  /** Login with email + password */
+  loginUser: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  /** Register with username, email + password */
+  registerUser: (
+    username: string,
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   checkDbConnection: () => Promise<void>;
   resetAdaptiveProgress: () => void;
+  /** JWT for authenticated API calls (null if guest) */
+  authToken: string | null;
 }
 
 const DEFAULT_SETTINGS: TestSettings = {
@@ -117,6 +126,18 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     const lsProfile = localStorage.getItem('typemaster_profile');
     if (lsProfile) savedProfile = JSON.parse(lsProfile);
+    const lsToken = localStorage.getItem('typemaster_token');
+    if (lsToken && savedProfile.id !== 'guest') {
+      savedProfile = { ...savedProfile, isGuest: false };
+    } else if (!lsToken) {
+      // Sin JWT: siempre invitado (invalidar perfiles legacy sin contraseña)
+      savedProfile = {
+        ...savedProfile,
+        id: 'guest',
+        username: savedProfile.username || 'Mecanógrafo Invitado',
+        isGuest: true,
+      };
+    }
 
     const lsKeyStats = localStorage.getItem('typemaster_keystats');
     if (lsKeyStats) savedKeyStats = JSON.parse(lsKeyStats);
@@ -222,6 +243,13 @@ export const useTypingStore = create<TypingState>((set, get) => {
     dbStatus: 'checking',
     isAuthModalOpen: false,
     isAchievementsModalOpen: false,
+    authToken: (() => {
+      try {
+        return localStorage.getItem('typemaster_token');
+      } catch {
+        return null;
+      }
+    })(),
 
     setIsAuthModalOpen: (open: boolean) => set({ isAuthModalOpen: open }),
     setIsAchievementsModalOpen: (open: boolean) => set({ isAchievementsModalOpen: open }),
@@ -264,10 +292,19 @@ export const useTypingStore = create<TypingState>((set, get) => {
       const state = get();
       state.checkDbConnection();
 
+      const token = state.authToken || localStorage.getItem('typemaster_token');
+      // Guests only use localStorage — no cloud sync
+      if (!token || state.profile.isGuest || state.profile.id === 'guest') {
+        return;
+      }
+
+      const authHeaders = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
       try {
-        const userId = state.profile.id || 'guest';
-        // Cargar tests desde la base de datos (Neon)
-        const testsRes = await fetch(`/api/tests?userId=${encodeURIComponent(userId)}`);
+        const testsRes = await fetch('/api/tests', { headers: authHeaders });
         if (testsRes.ok) {
           const apiTests = await testsRes.json();
           if (Array.isArray(apiTests) && apiTests.length > 0) {
@@ -275,16 +312,20 @@ export const useTypingStore = create<TypingState>((set, get) => {
               const existingIds = new Set(currentState.testHistory.map((t) => t.id));
               const newTests = apiTests.filter((t: TestResult) => !existingIds.has(t.id));
               const merged = [...currentState.testHistory, ...newTests].sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                (a, b) =>
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
               );
               localStorage.setItem('typemaster_history', JSON.stringify(merged));
               return { testHistory: merged };
             });
           }
+        } else if (testsRes.status === 401) {
+          // Token expired
+          get().logoutUser();
+          return;
         }
 
-        // Cargar usuario desde la base de datos (Neon)
-        const userRes = await fetch(`/api/user?id=${encodeURIComponent(userId)}`);
+        const userRes = await fetch('/api/user', { headers: authHeaders });
         if (userRes.ok) {
           const apiUser = await userRes.json();
           if (apiUser && apiUser.id) {
@@ -292,11 +333,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
               const updatedProfile = {
                 ...currentState.profile,
                 ...apiUser,
+                isGuest: false,
                 xp: Math.max(currentState.profile.xp, apiUser.xp || 0),
                 level: Math.max(currentState.profile.level, apiUser.level || 1),
               };
               localStorage.setItem('typemaster_profile', JSON.stringify(updatedProfile));
-              return { profile: updatedProfile };
+              return { profile: updatedProfile, authToken: token };
             });
           }
         }
@@ -305,12 +347,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
       }
     },
 
-    loginUser: async (username: string, email: string = '') => {
+    loginUser: async (email: string, password: string) => {
       try {
         const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, email })
+          body: JSON.stringify({ action: 'login', email, password }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -319,38 +361,65 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
         const user: UserProfile = { ...data.user, isGuest: false };
         const tests: TestResult[] = Array.isArray(data.tests) ? data.tests : [];
+        const token: string = data.token;
 
         set({
           profile: user,
-          testHistory: tests,
-          dbStatus: 'connected'
+          testHistory: tests.length > 0 ? tests : get().testHistory,
+          dbStatus: 'connected',
+          authToken: token,
         });
 
+        localStorage.setItem('typemaster_token', token);
         localStorage.setItem('typemaster_profile', JSON.stringify(user));
-        localStorage.setItem('typemaster_history', JSON.stringify(tests));
+        if (tests.length > 0) {
+          localStorage.setItem('typemaster_history', JSON.stringify(tests));
+        }
 
         return { success: true };
       } catch (err: any) {
-        // Fallback local en caso de que esté offline
-        const localId = 'usr_' + username.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const localProfile: UserProfile = {
-          id: localId,
-          username: username.trim(),
-          email: email.trim(),
-          xp: 0,
-          level: 1,
-          streak: 1,
-          maxStreak: 1,
-          lastActiveDate: new Date().toISOString().split('T')[0],
-          dailyGoalMinutes: 10,
-          minutesToday: 0,
-          isGuest: false
+        return {
+          success: false,
+          error: 'No se pudo conectar con el servidor. Comprueba tu conexión.',
         };
+      }
+    },
 
-        set({ profile: localProfile, dbStatus: 'offline' });
-        localStorage.setItem('typemaster_profile', JSON.stringify(localProfile));
+    registerUser: async (username: string, email: string, password: string) => {
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'register', username, email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Error al registrarse' };
+        }
+
+        const user: UserProfile = { ...data.user, isGuest: false };
+        const tests: TestResult[] = Array.isArray(data.tests) ? data.tests : [];
+        const token: string = data.token;
+
+        // Keep local history for the new account if any guest tests exist
+        const localHistory = get().testHistory;
+
+        set({
+          profile: user,
+          testHistory: tests.length > 0 ? tests : localHistory,
+          dbStatus: 'connected',
+          authToken: token,
+        });
+
+        localStorage.setItem('typemaster_token', token);
+        localStorage.setItem('typemaster_profile', JSON.stringify(user));
 
         return { success: true };
+      } catch (err: any) {
+        return {
+          success: false,
+          error: 'No se pudo conectar con el servidor. Comprueba tu conexión.',
+        };
       }
     },
 
@@ -366,11 +435,16 @@ export const useTypingStore = create<TypingState>((set, get) => {
         lastActiveDate: new Date().toISOString().split('T')[0],
         dailyGoalMinutes: 10,
         minutesToday: 0,
-        isGuest: true
+        isGuest: true,
       };
-      set({ profile: guestUser, testHistory: [] });
-      localStorage.setItem('typemaster_profile', JSON.stringify(guestUser));
-      localStorage.setItem('typemaster_history', JSON.stringify([]));
+      set({ profile: guestUser, testHistory: [], authToken: null });
+      try {
+        localStorage.removeItem('typemaster_token');
+        localStorage.setItem('typemaster_profile', JSON.stringify(guestUser));
+        localStorage.setItem('typemaster_history', JSON.stringify([]));
+      } catch {
+        // ignore
+      }
     },
 
     updateSettings: (newSettings) => {
@@ -726,34 +800,46 @@ export const useTypingStore = create<TypingState>((set, get) => {
           JSON.stringify(updatedAchievements)
         );
 
-        fetch('/api/tests', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(result),
-        })
-          .then(async (res) => {
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              console.error(
-                '[TypeMaster] Error guardando test en servidor/Neon:',
+        // Cloud sync only for registered users with a valid token
+        const token = get().authToken || localStorage.getItem('typemaster_token');
+        const isRegistered =
+          token && newProfile.id !== 'guest' && !newProfile.isGuest;
+
+        if (isRegistered) {
+          const authHeaders = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          };
+
+          fetch('/api/tests', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify(result),
+          })
+            .then(async (res) => {
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                console.error(
+                  '[TypeMaster] Error guardando test en servidor/Neon:',
+                  err
+                );
+              } else {
+                set({ dbStatus: 'connected' });
+              }
+            })
+            .catch((err) => {
+              console.warn(
+                '[TypeMaster] Backend no alcanzable para persistir test:',
                 err
               );
-            } else {
-              set({ dbStatus: 'connected' });
-            }
-          })
-          .catch((err) => {
-            console.warn(
-              '[TypeMaster] Backend no alcanzable para persistir test:',
-              err
-            );
-          });
+            });
 
-        fetch(`/api/user?id=${encodeURIComponent(newProfile.id)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newProfile),
-        }).catch(() => {});
+          fetch('/api/user', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify(newProfile),
+          }).catch(() => {});
+        }
       } catch (e) {
         console.error('[TypeMaster] Error en almacenamiento:', e);
       }

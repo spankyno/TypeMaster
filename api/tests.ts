@@ -1,9 +1,32 @@
 import { fetchTests, insertTest } from './_db.js';
+import { requireAuth } from './_authHelpers.js';
+
+function parseBody(req: any): Promise<any> {
+  return new Promise((resolve) => {
+    if (req.body && typeof req.body === 'object') {
+      resolve(req.body);
+      return;
+    }
+    if (typeof req.body === 'string') {
+      try { resolve(JSON.parse(req.body)); } catch { resolve({}); }
+      return;
+    }
+    if (typeof req.on !== 'function') {
+      resolve({});
+      return;
+    }
+    let str = '';
+    req.on('data', (c: any) => { str += c; });
+    req.on('end', () => {
+      try { resolve(JSON.parse(str)); } catch { resolve({}); }
+    });
+  });
+}
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -11,34 +34,29 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (req.method === 'GET') {
-      const userId = (req.query?.userId as string) || (req.query?.id as string) || 'guest';
+      const auth = requireAuth(req);
+      // Only authenticated users can load cloud history
+      if (!auth) {
+        return res.status(401).json({ error: 'Debes iniciar sesión para sincronizar el historial' });
+      }
+      const userId = auth.sub;
       const tests = await fetchTests(userId);
       return res.status(200).json(tests);
     }
 
     if (req.method === 'POST') {
-      let body = req.body;
-      if (typeof body === 'string') {
-        try {
-          body = JSON.parse(body);
-        } catch {
-          // keep as is
-        }
-      } else if (!body && typeof req.on === 'function') {
-        body = await new Promise((resolve) => {
-          let str = '';
-          req.on('data', (c: any) => { str += c; });
-          req.on('end', () => {
-            try { resolve(JSON.parse(str)); } catch { resolve({}); }
-          });
-        });
+      const auth = requireAuth(req);
+      if (!auth) {
+        return res.status(401).json({ error: 'Debes iniciar sesión para guardar tests en la nube' });
       }
 
+      const body = await parseBody(req);
       if (!body || typeof body !== 'object') {
         return res.status(400).json({ error: 'Cuerpo de petición inválido' });
       }
 
-      const testRecord = await insertTest(body);
+      // Force ownership — ignore client-supplied userId
+      const testRecord = await insertTest({ ...body, userId: auth.sub });
       return res.status(201).json({ success: true, test: testRecord });
     }
 

@@ -29,6 +29,8 @@ export interface DbUserProfile {
   lastActiveDate: string;
   dailyGoalMinutes: number;
   minutesToday: number;
+  /** Only present in internal lookups — never send to client */
+  passwordHash?: string;
 }
 
 // In-memory fallback for local dev when DATABASE_URL is not configured
@@ -49,6 +51,11 @@ let localMemoryDb = {
   } as Record<string, DbUserProfile>,
   tests: [] as DbTestRecord[],
 };
+
+function stripPassword(user: DbUserProfile): DbUserProfile {
+  const { passwordHash: _, ...rest } = user;
+  return rest;
+}
 
 export function getDatabaseClient() {
   const connectionString = (process.env.DATABASE_URL || '').trim();
@@ -327,4 +334,114 @@ export async function insertTest(test: DbTestRecord): Promise<DbTestRecord> {
   }
 
   return record;
+}
+
+/** Public profile without password hash */
+export function toPublicUser(user: DbUserProfile): DbUserProfile {
+  return stripPassword(user);
+}
+
+/**
+ * Register a new user with email + password hash.
+ * Throws Error with message if email already exists.
+ */
+export async function registerUser(
+  username: string,
+  email: string,
+  passwordHash: string
+): Promise<DbUserProfile> {
+  const cleanUsername = username.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanUsername || !cleanEmail || !passwordHash) {
+    throw new Error('username, email y password son obligatorios');
+  }
+
+  const userId =
+    'usr_' +
+    cleanEmail.replace(/[^a-z0-9]/g, '_').slice(0, 40) +
+    '_' +
+    Date.now().toString(36);
+
+  const sql = getDatabaseClient();
+  if (!sql) {
+    const exists = Object.values(localMemoryDb.users).find(
+      (u) => u.email?.toLowerCase() === cleanEmail
+    );
+    if (exists) throw new Error('Ya existe una cuenta con este correo');
+    const profile: DbUserProfile = {
+      id: userId,
+      username: cleanUsername,
+      email: cleanEmail,
+      xp: 0,
+      level: 1,
+      streak: 1,
+      maxStreak: 1,
+      lastActiveDate: new Date().toISOString().split('T')[0],
+      dailyGoalMinutes: 10,
+      minutesToday: 0,
+      passwordHash,
+    };
+    localMemoryDb.users[userId] = profile;
+    return stripPassword(profile);
+  }
+
+  const existing = await sql`
+    SELECT id FROM users WHERE LOWER(email) = ${cleanEmail} LIMIT 1
+  `;
+  if (existing && existing.length > 0) {
+    throw new Error('Ya existe una cuenta con este correo');
+  }
+
+  await sql`
+    INSERT INTO users (
+      id, username, email, password_hash, xp, level, streak, max_streak,
+      last_active_date, daily_goal_minutes, minutes_today
+    ) VALUES (
+      ${userId}, ${cleanUsername}, ${cleanEmail}, ${passwordHash},
+      0, 1, 1, 1, CURRENT_DATE, 10, 0
+    )
+  `;
+
+  return {
+    id: userId,
+    username: cleanUsername,
+    email: cleanEmail,
+    xp: 0,
+    level: 1,
+    streak: 1,
+    maxStreak: 1,
+    lastActiveDate: new Date().toISOString().split('T')[0],
+    dailyGoalMinutes: 10,
+    minutesToday: 0,
+  };
+}
+
+/** Fetch user including password_hash for login verification */
+export async function fetchUserByEmail(email: string): Promise<DbUserProfile | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  const sql = getDatabaseClient();
+  if (!sql) {
+    const found = Object.values(localMemoryDb.users).find(
+      (u) => u.email?.toLowerCase() === cleanEmail
+    );
+    return found || null;
+  }
+
+  try {
+    const rows = await sql`
+      SELECT id, username, email, password_hash AS "passwordHash",
+             xp, level, streak, max_streak AS "maxStreak",
+             last_active_date::text AS "lastActiveDate",
+             daily_goal_minutes AS "dailyGoalMinutes",
+             minutes_today AS "minutesToday"
+      FROM users
+      WHERE LOWER(email) = ${cleanEmail}
+      LIMIT 1
+    `;
+    if (!rows || rows.length === 0) return null;
+    return rows[0] as unknown as DbUserProfile;
+  } catch (err) {
+    console.error('fetchUserByEmail error:', err);
+    return null;
+  }
 }

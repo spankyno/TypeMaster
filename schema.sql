@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,
   username VARCHAR(255) NOT NULL DEFAULT 'Mecanógrafo Invitado',
   email VARCHAR(255) DEFAULT '',
+  password_hash VARCHAR(255) DEFAULT NULL,
   xp INTEGER NOT NULL DEFAULT 0,
   level INTEGER NOT NULL DEFAULT 1,
   streak INTEGER NOT NULL DEFAULT 1,
@@ -18,6 +19,14 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migración segura si la tabla ya existía sin password_hash
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL;
+
+-- Email único cuando no está vacío
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+  ON users (LOWER(email))
+  WHERE email IS NOT NULL AND email <> '';
 
 -- 2. Tabla de Resultados de Tests
 CREATE TABLE IF NOT EXISTS tests (

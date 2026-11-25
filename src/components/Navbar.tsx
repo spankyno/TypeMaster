@@ -1,10 +1,10 @@
 import React from 'react';
 import { useTypingStore } from '../store/useTypingStore';
-import { Keyboard, BarChart2, Flame, Award, Volume2, VolumeX, Moon, Sun, User, Database, LogIn } from 'lucide-react';
+import { Keyboard, BarChart2, Flame, Award, Volume2, VolumeX, Moon, Sun, User, Database, LogIn, Info } from 'lucide-react';
 
 interface NavbarProps {
-  currentTab: 'test' | 'stats' | 'adaptive' | 'settings';
-  setCurrentTab: (tab: 'test' | 'stats' | 'adaptive' | 'settings') => void;
+  currentTab: 'test' | 'stats' | 'adaptive' | 'about';
+  setCurrentTab: (tab: 'test' | 'stats' | 'adaptive' | 'about') => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
   onOpenAchievements: () => void;
@@ -74,6 +74,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Flame className="w-4 h-4 text-amber-500" />
           Adaptativo
+        </button>
+        <button
+          onClick={() => setCurrentTab('about')}
+          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
+            currentTab === 'about'
+              ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs'
+              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          <Info className="w-4 h-4" />
+          Acerca de
         </button>
       </nav>
 
