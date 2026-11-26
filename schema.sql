@@ -73,8 +73,9 @@ CREATE TABLE IF NOT EXISTS achievements (
 );
 
 -- Índices de Rendimiento
-CREATE INDEX IF NOT EXISTS idx_tests_user_id ON tests(user_id);
-CREATE INDEX IF NOT EXISTS idx_tests_created_at ON tests(created_at DESC);
+-- Cubre la consulta del historial: WHERE user_id = ? ORDER BY created_at DESC
+CREATE INDEX IF NOT EXISTS idx_tests_user_created ON tests(user_id, created_at DESC);
+-- (opcional, ya redundantes) DROP INDEX IF EXISTS idx_tests_user_id; DROP INDEX IF EXISTS idx_tests_created_at;
 CREATE INDEX IF NOT EXISTS idx_key_stats_user ON key_stats(user_id);
 
 -- Usuario Inicial por defecto (Invitado)

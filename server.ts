@@ -1,148 +1,57 @@
+/**
+ * Servidor de desarrollo local: monta los MISMOS handlers de /api que usa Vercel,
+ * de modo que auth, validación y rate-limit se comportan igual que en producción.
+ */
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-import { fetchUser, saveUser, fetchTests, insertTest, findOrCreateUser, testConnection } from './api/_db.js';
+import authHandler from './api/auth.js';
+import testsHandler from './api/tests.js';
+import userHandler from './api/user.js';
+import healthHandler from './api/health.js';
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
+app.disable('x-powered-by');
+app.set('trust proxy', true);
+app.use(express.json({ limit: '1mb' }));
 
-const PORT = process.env.PORT || 3000;
+const wrap =
+  (h: (req: any, res: any) => Promise<unknown>) =>
+  (req: express.Request, res: express.Response) => {
+    h(req, res).catch((err) => {
+      console.error(err);
+      if (!res.headersSent) res.status(500).json({ error: 'Error interno del servidor' });
+    });
+  };
 
-// API Routes
-app.get('/api/health', async (req, res) => {
-  const dbCheck = await testConnection();
-  res.json({
-    status: 'ok',
-    service: 'TypeMaster Local Dev Server',
-    database: {
-      configured: Boolean(process.env.DATABASE_URL),
-      status: dbCheck.status,
-      connected: dbCheck.connected,
-      error: dbCheck.error || null,
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
-
-app.post('/api/auth', async (req, res) => {
-  try {
-    const username = (req.body?.username || '').trim();
-    const email = (req.body?.email || '').trim();
-
-    if (!username) {
-      return res.status(400).json({ error: 'El nombre de usuario o alias es obligatorio' });
-    }
-
-    const user = await findOrCreateUser(username, email);
-    const tests = await fetchTests(user.id);
-
-    res.json({ success: true, user, tests });
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error en autenticación' });
-  }
-});
-
-app.get('/api/user/:id', async (req, res) => {
-  try {
-    const user = await fetchUser(req.params.id);
-    res.json(user);
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error fetching user' });
-  }
-});
-
-app.get('/api/user', async (req, res) => {
-  try {
-    const userId = (req.query.id as string) || (req.query.userId as string) || 'guest';
-    const user = await fetchUser(userId);
-    res.json(user);
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error fetching user' });
-  }
-});
-
-app.post('/api/user/:id', async (req, res) => {
-  try {
-    await saveUser({ ...req.body, id: req.params.id });
-    const user = await fetchUser(req.params.id);
-    res.json({ success: true, user });
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error saving user' });
-  }
-});
-
-app.post('/api/user', async (req, res) => {
-  try {
-    const userId = (req.body.id as string) || 'guest';
-    await saveUser({ ...req.body, id: userId });
-    const user = await fetchUser(userId);
-    res.json({ success: true, user });
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error saving user' });
-  }
-});
-
-app.post('/api/tests', async (req, res) => {
-  try {
-    const record = await insertTest(req.body);
-    res.status(201).json({ success: true, test: record });
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error saving test' });
-  }
-});
-
-app.get('/api/tests/:userId', async (req, res) => {
-  try {
-    const tests = await fetchTests(req.params.userId);
-    res.json(tests);
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error fetching tests' });
-  }
-});
-
-app.get('/api/tests', async (req, res) => {
-  try {
-    const userId = (req.query.userId as string) || (req.query.id as string) || 'guest';
-    const tests = await fetchTests(userId);
-    res.json(tests);
-  } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'Error fetching tests' });
-  }
-});
-
-// Serve frontend in production or dev proxy
-import { createServer as createViteServer } from 'vite';
+app.all('/api/auth', wrap(authHandler));
+app.all('/api/tests', wrap(testsHandler));
+app.all('/api/user', wrap(userHandler));
+app.all('/api/health', wrap(healthHandler));
+app.all('/api/*', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 async function startServer() {
-  const isDev = process.env.NODE_ENV !== 'production';
+  const PORT = Number(process.env.PORT) || 3000;
 
-  if (isDev) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer } = await import('vite');
+    const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
     app.use(express.static(distDir));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distDir, 'index.html'));
-    });
+    app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`TypeMaster server running on http://0.0.0.0:${PORT}`);
-    if (process.env.DATABASE_URL) {
-      console.log('Database: Neon PostgreSQL active');
-    } else {
-      console.log('Database: In-Memory / Local fallback active (Configura DATABASE_URL para conectar a Neon)');
-    }
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`TypeMaster server en http://localhost:${PORT}`);
+    console.log(
+      process.env.DATABASE_URL
+        ? 'Base de datos: Neon PostgreSQL'
+        : 'Base de datos: memoria local (define DATABASE_URL para usar Neon)'
+    );
   });
 }
 

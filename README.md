@@ -39,8 +39,9 @@ Al terminar un test como invitado se muestra un aviso para crear cuenta y no per
 
 - **Registro / login** con **email + contraseña** (sin verificación de correo en esta versión).
 - Contraseñas: **PBKDF2-SHA256** (100 000 iteraciones) en el servidor.
-- Sesión: **JWT** (30 días) en `localStorage`.
-- **Rate limit** en `/api/auth` (por IP y, en login, por IP+email).
+- Sesión: **JWT** (30 días) en `localStorage`, enviado solo por cabecera `Authorization: Bearer`.
+- **Rate limit** en `/api/auth` (por IP y, en login, por IP+email). Es en memoria y por instancia serverless: es una defensa *best-effort*; para garantías reales usa un almacén compartido (p. ej. Upstash Redis).
+- **Validación en servidor** de tests y perfil (rangos, PPM neto ≤ bruto, fechas, ids); el cliente no puede fijar `userId`, `email` ni retroceder XP.
 - **Cerrar sesión en todos los dispositivos**: incrementa `token_version` en la base de datos e invalida JWT antiguos.
 - En **producción** es **obligatorio** definir `JWT_SECRET` (mín. 16 caracteres).
 
@@ -67,14 +68,14 @@ JWT_SECRET=una-cadena-larga-y-aleatoria
 ```bash
 npm install
 cp .env.example .env   # opcional: DATABASE_URL y JWT_SECRET
-npm run dev            # API + frontend (tsx server.ts)
+npm run dev            # API real (api/*) + frontend (tsx server.ts)
 # o solo frontend:
 npm run dev:vite
 ```
 
 Abre `http://localhost:3000` (o el puerto que indique Vite).
 
-Sin `DATABASE_URL` la app funciona en **modo local** (memoria + `localStorage`).
+Sin `DATABASE_URL` la app funciona en **modo local** (memoria + `localStorage`). El servidor de desarrollo monta los mismos handlers que Vercel, así que auth y validación se comportan igual que en producción.
 
 ---
 
@@ -107,7 +108,7 @@ Guía detallada de despliegue: [`GUIA_DESPLIEGUE_VERCEL_NEON.md`](./GUIA_DESPLIE
 |------|--------|------|-------------|
 | `/api/auth` | POST `action=register\|login\|logout-all` | logout-all: JWT | Registro, login, revocar sesiones |
 | `/api/auth` | GET | JWT | Sesión actual |
-| `/api/tests` | GET / POST | JWT | Historial / guardar test |
+| `/api/tests` | GET / POST | JWT | Historial / guardar test (objeto o array de hasta 100; idempotente por `id`) |
 | `/api/user` | GET / POST | JWT | Perfil |
 | `/api/health` | GET | — | Estado de Neon |
 
@@ -120,6 +121,7 @@ npm run dev       # servidor de desarrollo integrado
 npm run build     # build de producción
 npm run preview   # previsualizar build
 npm run lint      # tsc --noEmit
+npm test          # tests unitarios (node:test + tsx)
 ```
 
 ---
