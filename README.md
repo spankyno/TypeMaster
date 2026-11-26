@@ -10,11 +10,11 @@ Aplicación web de **entrenamiento de mecanografía al tacto** (touch typing) op
   - ⏱️ **Tiempo**: 15 / 30 / 60 / 120 segundos
   - 📝 **Palabras**: 10 / 25 / 50 / 100 palabras
   - 💬 **Citas**: frases breves
-  - 📖 **Prosa**: párrafos coherentes en español
+  - 📖 **Prosa**: párrafos coherentes en español, longitud configurable (1, 2, 3 o 5 párrafos)
   - 🎯 **Adaptativo**: desbloqueo progresivo de letras (estilo Keybr)
   - ✏️ **Personalizado**: pega tu propio texto
 - **Teclado virtual QWERTY ES** con mapa de calor
-- **Métricas**: PPM neto/bruto, precisión, consistencia, gráfico WPM
+- **Métricas**: PPM (palabras/min) neto y bruto, **KPM (pulsaciones/min)**, precisión, consistencia, gráfico PPM/KPM
 - **Sonidos** sintetizados (Web Audio API)
 - **Cuentas**: invitados (solo local) vs registrados (sync en nube)
 - **Gamificación**: XP, niveles, rachas, logros
@@ -87,9 +87,14 @@ Ejecuta el contenido de [`schema.sql`](./schema.sql) en el SQL Editor de Neon. I
 - Tablas `tests`, `key_stats`, `achievements`
 - Índice único de email (cuando no está vacío)
 
-Migración mínima si ya tenías el esquema antiguo:
+Migración mínima si ya tenías el esquema antiguo (**ejecútala ANTES de desplegar la nueva versión**; es idempotente y el código antiguo sigue funcionando con las columnas nuevas):
 
 ```sql
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS kpm INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS keystrokes INTEGER NOT NULL DEFAULT 0;
+UPDATE tests SET kpm = raw_wpm * 5, keystrokes = ROUND(raw_wpm * 5 * duration_seconds / 60.0)
+  WHERE kpm = 0 AND raw_wpm > 0;
+
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
 

@@ -50,3 +50,13 @@ test('JWT: firma, manipulación y extracción solo por cabecera', () => {
   assert.equal(extractToken({ headers: { authorization: `Bearer ${tok}` } }), tok);
   assert.equal(extractToken({ headers: {}, ...({ query: { token: tok } } as any) }), null);
 });
+
+test('sanitizeTest: KPM y pulsaciones se acotan; si faltan se estiman', () => {
+  const withKpm = sanitizeTest({ ...good, kpm: 330, keystrokes: 165 })!;
+  assert.equal(withKpm.kpm, 330);
+  assert.equal(withKpm.keystrokes, 165);
+  assert.equal(sanitizeTest({ ...good, kpm: 99999 })!.kpm, 2500);
+  const legacy = sanitizeTest(good)!; // cliente antiguo: rawWpm 65 → 325 KPM
+  assert.equal(legacy.kpm, 325);
+  assert.equal(legacy.keystrokes, 163);
+});

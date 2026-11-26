@@ -1,5 +1,5 @@
 /** Lógica pura de mecanografía (sin React ni DOM) para poder testearla. */
-import type { UserProfile } from '../types';
+import type { TestResult, UserProfile } from '../types';
 
 /** PPM = (caracteres / 5) por minuto. Se usa un mínimo de 1 s para no disparar la cifra en las primeras pulsaciones. */
 export function calcWpm(chars: number, elapsedMs: number): number {
@@ -129,4 +129,77 @@ export function splitWords(text: string): { word: string; start: number }[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) res.push({ word: m[0], start: m.index });
   return res;
+}
+
+/** Pulsaciones por minuto (todas las teclas, aciertos y errores). */
+export function calcKpm(keystrokes: number, elapsedMs: number): number {
+  const minutes = Math.max(elapsedMs, 1000) / 60000;
+  return Math.max(0, Math.round(keystrokes / minutes));
+}
+
+const toNum = (v: unknown, fallback = 0): number => {
+  const n = typeof v === 'string' && v.trim() === '' ? NaN : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/**
+ * Fuerza tipos numéricos en un test venido de localStorage o de la API.
+ * Neon devuelve NUMERIC como string ("30.00"): sin esto, sumar duraciones concatenaba cadenas (→ NaN).
+ * Los tests antiguos sin `kpm` lo estiman como PPM bruto × 5.
+ */
+export function normalizeTest(t: any): TestResult {
+  const rawWpm = toNum(t?.rawWpm);
+  const durationSeconds = Math.max(0, toNum(t?.durationSeconds));
+  const kpm = toNum(t?.kpm) > 0 ? Math.round(toNum(t.kpm)) : Math.round(rawWpm * 5);
+  const keystrokes =
+    toNum(t?.keystrokes) > 0 ? Math.round(toNum(t.keystrokes)) : Math.round((kpm * durationSeconds) / 60);
+  return {
+    id: String(t?.id ?? ''),
+    userId: t?.userId,
+    mode: String(t?.mode ?? ''),
+    subMode: t?.subMode ?? '',
+    wpm: toNum(t?.wpm),
+    rawWpm,
+    kpm,
+    keystrokes,
+    accuracy: toNum(t?.accuracy, 100),
+    consistency: toNum(t?.consistency, 100),
+    charsCorrect: toNum(t?.charsCorrect),
+    charsWrong: toNum(t?.charsWrong),
+    charsExtra: toNum(t?.charsExtra),
+    charsMissed: toNum(t?.charsMissed),
+    durationSeconds,
+    wpmSeries: Array.isArray(t?.wpmSeries) ? t.wpmSeries.map((v: unknown) => toNum(v)) : [],
+    createdAt: String(t?.createdAt ?? new Date(0).toISOString()),
+  };
+}
+
+/** 45 s → "45 s", 754 s → "13 min", 5400 s → "1,5 h" */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Number.isFinite(totalSeconds) ? totalSeconds : 0);
+  if (s < 60) return `${Math.round(s)} s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  return `${(s / 3600).toFixed(1).replace('.', ',')} h`;
+}
+
+/** Etiqueta legible del modo de un test: "Tiempo · 30 s", "Prosa · 2 párr." */
+export function describeTest(mode: string, subMode: string | number): string {
+  const sub = Number(subMode);
+  switch (mode) {
+    case 'time':
+      return `Tiempo · ${sub} s`;
+    case 'words':
+      return `Palabras · ${sub}`;
+    case 'adaptive':
+      return `Adaptativo · ${sub}`;
+    case 'prose':
+      // Los tests antiguos guardaban aquí el nº de palabras (10/25/50/100) en vez de párrafos
+      return [1, 2, 3, 5].includes(sub) ? `Prosa · ${sub} párr.` : 'Prosa';
+    case 'quote':
+      return 'Cita';
+    case 'custom':
+      return 'Personalizado';
+    default:
+      return mode;
+  }
 }

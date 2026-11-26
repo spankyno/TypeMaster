@@ -7,6 +7,9 @@ import { soundEngine } from '../lib/engine/soundEngine';
 
 import {
   calcWpm,
+  calcKpm,
+  normalizeTest,
+  shuffle,
   calcAccuracy,
   calculateConsistency,
   computeXp,
@@ -51,6 +54,9 @@ interface TypingState {
   wpmSeries: number[];
   /** Errores en modo estricto (pulsaciones erróneas que no avanzan el cursor) */
   strictMisses: number;
+  /** Pulsaciones totales del test (aciertos + errores, sin Retroceso) y su ritmo por minuto */
+  keystrokes: number;
+  kpm: number;
   /** XP ganada en el último test (la misma cifra que se suma al perfil) */
   lastXpEarned: number;
 
@@ -100,6 +106,7 @@ const DEFAULT_SETTINGS: TestSettings = {
   mode: 'time',
   timeSubMode: 30,
   wordsSubMode: 25,
+  proseLength: 1,
   language: 'es',
   layout: 'qwerty-es',
   includePunctuation: false,
@@ -165,7 +172,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
   try {
     const lsHistory = localStorage.getItem('typemaster_history');
-    if (lsHistory) savedHistory = JSON.parse(lsHistory);
+    if (lsHistory) savedHistory = (JSON.parse(lsHistory) as unknown[]).map(normalizeTest);
 
     const lsProfile = localStorage.getItem('typemaster_profile');
     if (lsProfile) savedProfile = JSON.parse(lsProfile);
@@ -236,7 +243,9 @@ export const useTypingStore = create<TypingState>((set, get) => {
       return q;
     }
     if (settings.mode === 'prose') {
-      return SPANISH_PROSE[Math.floor(Math.random() * SPANISH_PROSE.length)];
+      // Longitud configurable: 1, 2, 3 o 5 párrafos distintos encadenados
+      const paragraphs = Math.min(settings.proseLength || 1, SPANISH_PROSE.length);
+      return shuffle(SPANISH_PROSE).slice(0, paragraphs).join(' ');
     }
     if (settings.mode === 'custom') {
       return ''; // custom text is supplied via initTest(customText)
@@ -259,6 +268,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
     'mode',
     'timeSubMode',
     'wordsSubMode',
+    'proseLength',
     'includePunctuation',
     'includeNumbers',
     'language',
@@ -286,6 +296,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
     charsMissed: 0,
     wpmSeries: [],
     strictMisses: 0,
+    keystrokes: 0,
+    kpm: 0,
     lastXpEarned: 0,
 
     profile: savedProfile,
@@ -363,8 +375,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
       try {
         const testsRes = await fetch('/api/tests', { headers: authHeaders });
         if (testsRes.ok) {
-          const apiTests = await testsRes.json();
-          if (Array.isArray(apiTests) && apiTests.length > 0) {
+          const apiTests = ((await testsRes.json()) as unknown[]).map(normalizeTest);
+          if (apiTests.length > 0) {
             set((currentState) => {
               const existingIds = new Set(currentState.testHistory.map((t) => t.id));
               const newTests = apiTests.filter((t: TestResult) => !existingIds.has(t.id));
@@ -422,7 +434,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
         const guest = get().profile;
         const guestWasLocal = guest.id === 'guest' || !!guest.isGuest;
         const token: string = data.token;
-        const cloudTests: TestResult[] = Array.isArray(data.tests) ? data.tests : [];
+        const cloudTests: TestResult[] = Array.isArray(data.tests) ? data.tests.map(normalizeTest) : [];
         const { merged, toUpload } = mergeHistories(
           guestWasLocal ? get().testHistory : [],
           cloudTests,
@@ -587,6 +599,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
           charsMissed: 0,
           wpmSeries: [],
           strictMisses: 0,
+          keystrokes: 0,
+          kpm: 0,
           lastXpEarned: 0,
           activeKey: null,
           lastKeyError: false,
@@ -623,6 +637,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
           charsMissed: 0,
           wpmSeries: [],
           strictMisses: 0,
+          keystrokes: 0,
+          kpm: 0,
           lastXpEarned: 0,
           activeKey: null,
           lastKeyError: false,
@@ -667,6 +683,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
         const now = performance.now();
         const isError = index < target.length ? key !== target[index] : true;
+        const keystrokes = currentState.keystrokes + 1;
 
         soundEngine.playKeySound(isError);
 
@@ -689,6 +706,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
           const start = currentState.startTime || now;
           return {
             strictMisses,
+            keystrokes,
+            kpm: calcKpm(keystrokes, now - start),
             accuracy: calcAccuracy(correctCount, typedChars.length, strictMisses),
             wpm: calcWpm(correctCount, now - start),
             activeKey: key,
@@ -741,6 +760,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
           charsWrong: wrongCount,
           charsExtra: extraCount,
           strictMisses,
+          keystrokes,
+          kpm: calcKpm(keystrokes, elapsedMs),
           accuracy,
           wpm,
           rawWpm,
@@ -807,8 +828,9 @@ export const useTypingStore = create<TypingState>((set, get) => {
       const sec = Math.floor(elapsedMs / 1000);
       // El PPM en vivo también baja si dejas de teclear
       const liveWpm = calcWpm(state.charsCorrect, elapsedMs);
+      const liveKpm = calcKpm(state.keystrokes, elapsedMs);
       if (sec === state.elapsedSeconds) {
-        if (liveWpm !== state.wpm) set({ wpm: liveWpm });
+        if (liveWpm !== state.wpm || liveKpm !== state.kpm) set({ wpm: liveWpm, kpm: liveKpm });
         return;
       }
 
@@ -816,6 +838,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
         elapsedSeconds: sec,
         timeRemaining: Math.max(0, state.settings.timeSubMode - sec),
         wpm: liveWpm,
+        kpm: liveKpm,
         wpmSeries: [...state.wpmSeries, liveWpm],
       });
     },
@@ -835,6 +858,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
       const durationSeconds = Math.max(1, Math.round((elapsedMs / 1000) * 100) / 100);
       const wpm = calcWpm(state.charsCorrect, elapsedMs);
       const rawWpm = calcWpm(state.typedChars.length, elapsedMs);
+      const kpm = calcKpm(state.keystrokes, elapsedMs);
       const accuracy = calcAccuracy(state.charsCorrect, state.typedChars.length, state.strictMisses);
 
       const wpmSeries = [...state.wpmSeries];
@@ -848,9 +872,15 @@ export const useTypingStore = create<TypingState>((set, get) => {
         id: newTestId(),
         userId: state.profile.id || 'guest',
         mode: state.settings.mode,
-        subMode: isTime ? state.settings.timeSubMode : state.settings.wordsSubMode,
+        subMode: isTime
+          ? state.settings.timeSubMode
+          : state.settings.mode === 'prose'
+            ? state.settings.proseLength
+            : state.settings.wordsSubMode,
         wpm,
         rawWpm,
+        kpm,
+        keystrokes: state.keystrokes,
         accuracy,
         consistency,
         charsCorrect: state.charsCorrect,
@@ -899,6 +929,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
       set({
         wpm,
         rawWpm,
+        kpm,
         accuracy,
         consistency,
         charsMissed,

@@ -12,6 +12,8 @@ export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNex
   const {
     wpm,
     rawWpm,
+    kpm,
+    keystrokes,
     accuracy,
     consistency,
     charsCorrect,
@@ -46,11 +48,17 @@ export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNex
       </div>
 
       {/* Main Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
           <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">PPM Neto (WPM)</div>
           <div className="text-4xl font-black text-amber-500 tracking-tight">{wpm}</div>
           <div className="text-xs text-neutral-400 mt-1">Bruto: {rawWpm} PPM</div>
+        </div>
+
+        <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
+          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Pulsaciones/min</div>
+          <div className="text-4xl font-black text-sky-600 dark:text-sky-400 tracking-tight">{kpm}</div>
+          <div className="text-xs text-neutral-400 mt-1">KPM · {keystrokes} pulsaciones</div>
         </div>
 
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTypingStore } from '../store/useTypingStore';
 import { VirtualKeyboard } from './VirtualKeyboard';
 import { TestResultModal } from './TestResultModal';
@@ -50,6 +50,9 @@ function tokenize(text: string): { start: number; text: string }[] {
   return tokens;
 }
 
+/** A partir de aquí el texto se muestra en una ventana de 4 líneas que avanza sola */
+const WINDOW_THRESHOLD = 700;
+
 export const TypingArea: React.FC = () => {
   const {
     settings,
@@ -60,6 +63,7 @@ export const TypingArea: React.FC = () => {
     currentIndex,
     timeRemaining,
     wpm,
+    kpm,
     accuracy,
     activeKey,
     processKey,
@@ -73,7 +77,6 @@ export const TypingArea: React.FC = () => {
 
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const textContainerRef = useRef<HTMLDivElement>(null);
 
   const isAnyModalOpen = isAuthModalOpen || isCustomModalOpen || isAchievementsModalOpen;
 
@@ -136,22 +139,23 @@ export const TypingArea: React.FC = () => {
     return () => el.removeEventListener('blur', onBlur);
   }, [isAnyModalOpen, status]);
 
-  // Auto-scroll so the current caret stays visible inside the text container.
-  useEffect(() => {
-    const container = textContainerRef.current;
-    const caret = container?.querySelector<HTMLElement>('[data-caret="true"]');
-    if (!caret || !container) return;
+  // Textos largos (modo Tiempo o > 700 caracteres): ventana de 4 líneas SIN barra de scroll.
+  // La línea actual se mantiene como 2ª línea, así siempre ves las siguientes antes de llegar a ellas.
+  // Textos cortos/medios (p. ej. prosa): se muestran enteros en el cuadro, sin scroll.
+  const windowed = settings.mode === 'time' || targetText.length > WINDOW_THRESHOLD;
+  const viewportRef = useRef<HTMLDivElement>(null);
 
-    const caretRect = caret.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const padding = 24;
-
-    if (caretRect.bottom > containerRect.bottom - padding) {
-      container.scrollTop += caretRect.bottom - containerRect.bottom + padding;
-    } else if (caretRect.top < containerRect.top + padding) {
-      container.scrollTop -= containerRect.top + padding - caretRect.top;
+  useLayoutEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || !windowed) return;
+    const caret = vp.querySelector<HTMLElement>('[data-caret="true"]');
+    if (!caret) return;
+    const lineH = parseFloat(getComputedStyle(vp).lineHeight) || 48;
+    const top = Math.max(0, caret.offsetTop - lineH);
+    if (Math.abs(vp.scrollTop - top) > 1) {
+      vp.scrollTo({ top, behavior: currentIndex === 0 ? 'auto' : 'smooth' });
     }
-  }, [currentIndex, targetText]);
+  }, [currentIndex, targetText, windowed]);
 
   // Timer interval for time mode
   useEffect(() => {
@@ -337,6 +341,24 @@ export const TypingArea: React.FC = () => {
               </div>
             )}
 
+            {settings.mode === 'prose' && (
+              <div className="flex items-center gap-1 text-xs" title="Longitud de la prosa (párrafos)">
+                {([1, 2, 3, 5] as const).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => updateSettings({ proseLength: n })}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                      settings.proseLength === n
+                        ? 'text-amber-500 bg-amber-500/10'
+                        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                    }`}
+                  >
+                    {n} {n === 1 ? 'párr.' : 'párrs.'}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="w-[1px] h-5 bg-neutral-300 dark:bg-neutral-700" />
 
             {/* Option toggles: punctuation, numbers, keyboard, strict */}
@@ -391,28 +413,37 @@ export const TypingArea: React.FC = () => {
             {settings.liveWpm && (
               <div className="text-neutral-400 text-sm flex items-center gap-4">
                 <span>{wpm} PPM</span>
+                <span title="Pulsaciones por minuto">{kpm} KPM</span>
                 <span>{accuracy}% prec</span>
               </div>
             )}
           </div>
 
-          {/* Main Text Display — scrollable, caret auto-scroll */}
+          {/* Main Text Display — texto completo, o ventana de 4 líneas sin scroll manual */}
           <div
-            ref={textContainerRef}
-            className="w-full bg-white dark:bg-neutral-900/40 p-8 md:p-12 rounded-3xl border border-neutral-200 dark:border-neutral-800/80 shadow-sm relative select-none cursor-text min-h-[220px] max-h-[360px] overflow-y-auto flex items-start"
+            className="w-full bg-white dark:bg-neutral-900/40 p-8 md:p-12 rounded-3xl border border-neutral-200 dark:border-neutral-800/80 shadow-sm select-none cursor-text min-h-[220px] flex items-start"
             onClick={focusTypingInput}
           >
-            <div className="font-mono text-2xl md:text-3xl leading-[1.9] tracking-wide w-full">
-              {tokens.map((tok) => (
-                <span key={tok.start} className="inline-block whitespace-pre">
-                  {tok.text.split('').map((char, i) => {
-                    const idx = tok.start + i;
-                    const typed = typedChars[idx];
-                    const state: CharState = typed ? (typed.correct ? 'correct' : 'wrong') : 'untyped';
-                    return <Char key={idx} char={char} state={state} isCurrent={idx === currentIndex} />;
-                  })}
-                </span>
-              ))}
+            <div
+              ref={viewportRef}
+              data-testid="text-viewport"
+              className={`font-mono ${
+                targetText.length > 300 ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl'
+              } leading-[1.9] tracking-wide w-full ${windowed ? 'overflow-hidden' : ''}`}
+              style={windowed ? { height: '7.6em' } : undefined}
+            >
+              <div className="relative">
+                {tokens.map((tok) => (
+                  <span key={tok.start} className="inline-block whitespace-pre">
+                    {tok.text.split('').map((char, i) => {
+                      const idx = tok.start + i;
+                      const typed = typedChars[idx];
+                      const state: CharState = typed ? (typed.correct ? 'correct' : 'wrong') : 'untyped';
+                      return <Char key={idx} char={char} state={state} isCurrent={idx === currentIndex} />;
+                    })}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

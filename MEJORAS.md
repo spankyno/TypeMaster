@@ -1,5 +1,16 @@
 # Mejoras aplicadas
 
+## Ronda 2
+- **"Tiempo practicado = NaNh"**: Neon devuelve `NUMERIC` como string (`"30.00"`), así que `reduce` concatenaba cadenas en vez de sumar. Corregido en tres capas: el servidor castea a `float8`, el cliente normaliza todos los tests (también los ya guardados en `localStorage`, que arrastraban strings) y el total se muestra como `45 s` / `13 min` / `1,5 h`.
+- **Pulsaciones por minuto (KPM)**: se registran `kpm` y `keystrokes` (todas las teclas pulsadas, aciertos y errores, sin Retroceso). Aparece en vivo, en el resultado, en las estadísticas (tarjeta, tabla, gráfica conmutable PPM/KPM), en el CSV y en la base de datos. Los tests antiguos se estiman como PPM bruto × 5.
+- **Prosa sin scroll vertical**: ya no hay `overflow-y-auto`. Los textos de hasta ~700 caracteres se muestran enteros en el cuadro; los más largos (modo Tiempo, prosa de 3–5 párrafos…) usan una ventana de 4 líneas que avanza sola dejando la línea actual como segunda, de modo que siempre ves las siguientes. La letra se reduce en textos largos.
+- **Longitud de prosa configurable**: 1, 2, 3 o 5 párrafos (≈50 / 100 / 140 / 235 palabras), guardada en las preferencias.
+- Etiquetas de modo legibles en el historial ("Prosa · 2 párr.", "Tiempo · 30 s").
+- Verificado en Chromium (Playwright) y con 25 tests unitarios, incluida la regresión del `NaN`.
+
+> **Migración de BD (hazla antes de desplegar):** ejecuta las 3 sentencias `ALTER/UPDATE` de `schema.sql` (sección "Migración segura"). Son idempotentes y el código antiguo sigue funcionando con las columnas nuevas.
+
+
 ## Bugs corregidos
 | Problema | Solución |
 |---|---|

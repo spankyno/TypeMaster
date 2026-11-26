@@ -1,11 +1,14 @@
 export type TestMode = 'time' | 'words' | 'quote' | 'prose' | 'zen' | 'custom' | 'adaptive';
 export type TimeSubMode = 15 | 30 | 60 | 120;
 export type WordsSubMode = 10 | 25 | 50 | 100;
+/** Prosa: nº de párrafos (≈45 palabras cada uno) */
+export type ProseLength = 1 | 2 | 3 | 5;
 
 export interface TestSettings {
   mode: TestMode;
   timeSubMode: TimeSubMode;
   wordsSubMode: WordsSubMode;
+  proseLength: ProseLength;
   language: 'es';
   layout: 'qwerty-es';
   includePunctuation: boolean;
@@ -34,6 +37,10 @@ export interface TestResult {
   subMode: string | number;
   wpm: number;
   rawWpm: number;
+  /** Pulsaciones por minuto (todas las teclas pulsadas, incluidas errores; sin Retroceso) */
+  kpm: number;
+  /** Total de pulsaciones durante el test */
+  keystrokes: number;
   accuracy: number;
   consistency: number;
   charsCorrect: number;

@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS tests (
   sub_mode VARCHAR(50) NOT NULL,
   wpm INTEGER NOT NULL,
   raw_wpm INTEGER NOT NULL,
+  kpm INTEGER NOT NULL DEFAULT 0,          -- pulsaciones por minuto
+  keystrokes INTEGER NOT NULL DEFAULT 0,   -- total de pulsaciones
   accuracy INTEGER NOT NULL,
   consistency INTEGER NOT NULL,
   chars_correct INTEGER NOT NULL DEFAULT 0,
@@ -48,6 +50,15 @@ CREATE TABLE IF NOT EXISTS tests (
   wpm_series JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migración segura si la tabla tests ya existía (ejecutar ANTES de desplegar la nueva versión)
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS kpm INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS keystrokes INTEGER NOT NULL DEFAULT 0;
+-- Los tests antiguos no registraron pulsaciones: se estiman (PPM bruto × 5 caracteres por palabra)
+UPDATE tests
+SET kpm = raw_wpm * 5,
+    keystrokes = ROUND(raw_wpm * 5 * duration_seconds / 60.0)
+WHERE kpm = 0 AND raw_wpm > 0;
 
 -- 3. Tabla de Estadísticas de Teclas (Entrenamiento Adaptativo)
 CREATE TABLE IF NOT EXISTS key_stats (

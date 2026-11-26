@@ -12,6 +12,8 @@ export interface CleanTest {
   subMode: string;
   wpm: number;
   rawWpm: number;
+  kpm: number;
+  keystrokes: number;
   accuracy: number;
   consistency: number;
   charsCorrect: number;
@@ -78,6 +80,10 @@ export function sanitizeTest(raw: any, now: number = Date.now()): CleanTest | nu
         .map((v: unknown) => intInRange(v, 0, MAX_WPM + 100) ?? 0)
     : [];
 
+  // KPM / pulsaciones: si el cliente es antiguo y no las envía, se estiman a partir del PPM bruto
+  const kpm = intInRange(raw.kpm, 0, 2500) ?? rawWpm * 5;
+  const keystrokes = intInRange(raw.keystrokes, 0, 500_000) ?? Math.round((kpm * durationSeconds) / 60);
+
   let id = typeof raw.id === 'string' ? raw.id : '';
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) id = `test_${randomUUID()}`;
 
@@ -96,6 +102,8 @@ export function sanitizeTest(raw: any, now: number = Date.now()): CleanTest | nu
     subMode,
     wpm,
     rawWpm,
+    kpm,
+    keystrokes,
     accuracy,
     consistency,
     charsCorrect: intInRange(raw.charsCorrect ?? 0, 0, 200000) ?? 0,

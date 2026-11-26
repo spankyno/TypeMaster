@@ -111,7 +111,7 @@ export async function fetchTests(userId: string, limit = 200): Promise<DbTestRec
     return localMemoryDb.tests.filter((t) => t.userId === userId).slice(0, limit);
   }
   const rows = await sql`
-    SELECT id, user_id AS "userId", mode, sub_mode AS "subMode", wpm, raw_wpm AS "rawWpm",
+    SELECT id, user_id AS "userId", mode, sub_mode AS "subMode", wpm, raw_wpm AS "rawWpm", kpm, keystrokes,
            accuracy, consistency, chars_correct AS "charsCorrect", chars_wrong AS "charsWrong",
            chars_extra AS "charsExtra", chars_missed AS "charsMissed",
            duration_seconds::float8 AS "durationSeconds", wpm_series AS "wpmSeries",
@@ -143,11 +143,11 @@ export async function insertTests(userId: string, tests: CleanTest[]): Promise<n
     tests.map(
       (t) => sql`
         INSERT INTO tests (
-          id, user_id, mode, sub_mode, wpm, raw_wpm, accuracy, consistency,
+          id, user_id, mode, sub_mode, wpm, raw_wpm, kpm, keystrokes, accuracy, consistency,
           chars_correct, chars_wrong, chars_extra, chars_missed,
           duration_seconds, wpm_series, created_at
         ) VALUES (
-          ${t.id}, ${userId}, ${t.mode}, ${t.subMode}, ${t.wpm}, ${t.rawWpm},
+          ${t.id}, ${userId}, ${t.mode}, ${t.subMode}, ${t.wpm}, ${t.rawWpm}, ${t.kpm}, ${t.keystrokes},
           ${t.accuracy}, ${t.consistency}, ${t.charsCorrect}, ${t.charsWrong},
           ${t.charsExtra}, ${t.charsMissed}, ${t.durationSeconds},
           ${JSON.stringify(t.wpmSeries)}::jsonb, ${t.createdAt}
