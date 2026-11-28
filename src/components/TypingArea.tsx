@@ -205,16 +205,73 @@ export const TypingArea: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [initTest, status, isAnyModalOpen]);
 
+  /**
+   * Captura de teclas con soporte de teclas muertas (acentos ´ ` ¨ ^) e IME.
+   * En Linux (y a veces macOS) la secuencia es: Dead → composición → carácter final.
+   * Si hacemos preventDefault durante la composición, el acento nunca llega (falla típica
+   * que en Windows no se reproduce). compositionend entrega el carácter ya compuesto.
+   */
+  const composingRef = useRef(false);
+  /** Si compositionend y keydown emiten el mismo carácter, ignorar el keydown duplicado. */
+  const skipKeyRef = useRef<string | null>(null);
+
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (isAnyModalOpen) return;
+
+    // No interceptar teclas muertas ni eventos mientras el IME está componiendo
+    if (e.nativeEvent.isComposing || e.key === 'Dead' || e.key === 'Process' || composingRef.current) {
+      return;
+    }
 
     if (e.key === 'Backspace') {
       e.preventDefault();
       backspace();
-    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      return;
+    }
+
+    // Ctrl/Cmd = atajos del sistema; no consumir. AltGr (Ctrl+Alt) se deja pasar
+    // solo si llega un carácter imprimible (algunos layouts lo usan).
+    if (e.ctrlKey || e.metaKey) {
+      if (!(e.altKey && e.key.length === 1)) return;
+    }
+
+    if (e.key.length === 1) {
+      // Duplicado tras compositionend: solo se omite si coincide el carácter
+      if (skipKeyRef.current !== null) {
+        const skip = skipKeyRef.current === e.key;
+        skipKeyRef.current = null;
+        if (skip) {
+          e.preventDefault();
+          return;
+        }
+      }
       e.preventDefault();
       processKey(e.key);
+      if (inputRef.current) inputRef.current.value = '';
     }
+  };
+
+  const handleCompositionStart = () => {
+    composingRef.current = true;
+  };
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    composingRef.current = false;
+    if (isAnyModalOpen) return;
+
+    const data = e.data ?? '';
+    for (const ch of data) {
+      processKey(ch);
+    }
+    // Algunos navegadores emiten también un keydown con el carácter compuesto
+    if (data.length === 1) {
+      skipKeyRef.current = data;
+      // Por si no llega ese keydown, no bloquear la siguiente letra real
+      window.setTimeout(() => {
+        if (skipKeyRef.current === data) skipKeyRef.current = null;
+      }, 0);
+    }
+    if (inputRef.current) inputRef.current.value = '';
   };
 
   const tokens = useMemo(() => tokenize(targetText), [targetText]);
@@ -228,16 +285,21 @@ export const TypingArea: React.FC = () => {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col items-center justify-center min-h-[75vh]">
-      {/* Hidden input for high performance keystroke capture */}
+      {/* Input oculto para capturar pulsaciones. No usar w-0/h-0 ni pointer-events-none:
+          en Linux eso rompe teclas muertas (acentos) e IME. Tamaño mínimo + opacity 0. */}
       <input
         ref={inputRef}
         data-typing-input
         type="text"
-        className="opacity-0 absolute w-0 h-0 pointer-events-none"
+        className="absolute opacity-0 w-px h-px overflow-hidden border-0 p-0 m-0"
+        style={{ caretColor: 'transparent' }}
         onKeyDown={handleInputKeyDown}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
         autoFocus={!isAnyModalOpen}
         autoComplete="off"
         autoCapitalize="off"
+        autoCorrect="off"
         spellCheck="false"
         disabled={isAnyModalOpen}
         tabIndex={0}
