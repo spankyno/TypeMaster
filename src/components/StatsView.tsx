@@ -87,7 +87,7 @@ export const StatsView: React.FC = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between text-neutral-500 mb-2">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Mejor PPM</span>
             <Award className="w-5 h-5 text-amber-500" />
           </div>
@@ -96,7 +96,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between text-neutral-500 mb-2">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">PPM Medio</span>
             <TrendingUp className="w-5 h-5 text-indigo-500" />
           </div>
@@ -105,7 +105,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between text-neutral-500 mb-2">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Pulsaciones/min</span>
             <Keyboard className="w-5 h-5 text-sky-500" />
           </div>
@@ -114,7 +114,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between text-neutral-500 mb-2">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Precisión Media</span>
             <Award className="w-5 h-5 text-emerald-500" />
           </div>
@@ -123,7 +123,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between text-neutral-500 mb-2">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Tiempo Practicado</span>
             <Clock className="w-5 h-5 text-purple-500" />
           </div>
@@ -144,7 +144,7 @@ export const StatsView: React.FC = () => {
                 key={m}
                 onClick={() => setMetric(m)}
                 className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  metric === m ? 'bg-amber-500 text-neutral-950' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  metric === m ? 'bg-amber-500 text-neutral-950' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 {m === 'wpm' ? 'PPM' : 'KPM'}
@@ -180,11 +180,11 @@ export const StatsView: React.FC = () => {
       <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-sm">
         <div className="p-6 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
           <h3 className="text-lg font-bold text-neutral-900 dark:text-white">Historial de Tests Recientes</h3>
-          <span className="text-xs text-neutral-500">{totalTests} tests guardados</span>
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">{totalTests} tests guardados</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-50 dark:bg-neutral-800/50 text-neutral-500 uppercase font-semibold">
+            <thead className="bg-neutral-50 dark:bg-neutral-800/50 text-neutral-500 dark:text-neutral-400 uppercase font-semibold">
               <tr>
                 <th className="px-6 py-4">Modo</th>
                 <th className="px-6 py-4">PPM (WPM)</th>
@@ -203,8 +203,8 @@ export const StatsView: React.FC = () => {
                   <td className="px-6 py-4 text-neutral-600 dark:text-neutral-400">{t.rawWpm}</td>
                   <td className="px-6 py-4 font-semibold text-sky-500">{t.kpm}</td>
                   <td className="px-6 py-4 font-semibold text-emerald-500">{t.accuracy}%</td>
-                  <td className="px-6 py-4 text-neutral-500">{Math.round(t.durationSeconds)}s</td>
-                  <td className="px-6 py-4 text-neutral-500">{new Date(t.createdAt).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{Math.round(t.durationSeconds)}s</td>
+                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{new Date(t.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
               {testHistory.length === 0 && (

@@ -5,6 +5,7 @@ import { getTokenVersion } from './_db.js';
 export function prepareApi(req: any, res: any, methods: string[]): boolean {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Allow', [...methods, 'OPTIONS'].join(', '));
   if (req.method === 'OPTIONS') {
     res.status(204).end();

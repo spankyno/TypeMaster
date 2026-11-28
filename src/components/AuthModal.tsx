@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTypingStore } from '../store/useTypingStore';
 import {
   User,
@@ -33,6 +33,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Solo se consulta el estado de la BD cuando el usuario abre este panel (no en cada visita)
+  useEffect(() => {
+    if (isOpen) void checkDbConnection();
+  }, [isOpen, checkDbConnection]);
   const [testingDb, setTestingDb] = useState(false);
 
   if (!isOpen) return null;
@@ -150,7 +155,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         {/* DB status */}
         <div className="mb-6 p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs bg-neutral-50 dark:bg-neutral-800/40 border-neutral-200 dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
-            <Database className="w-4 h-4 text-neutral-500" />
+            <Database className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
             <div>
               <div className="font-semibold text-neutral-900 dark:text-neutral-100">
                 Neon DB:{' '}
@@ -177,7 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <button
             onClick={handleTestDb}
             disabled={testingDb}
-            className="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 transition-colors"
+            className="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
             title="Comprobar conexión"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${testingDb ? 'animate-spin' : ''}`} />
@@ -257,7 +262,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <span>{mode === 'login' ? 'Entrar' : 'Crear cuenta'}</span>
             </button>
 
-            <div className="text-center text-xs text-neutral-500">
+            <div className="text-center text-xs text-neutral-500 dark:text-neutral-400">
               {mode === 'login' ? (
                 <button
                   type="button"
@@ -286,7 +291,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <button
               type="button"
               onClick={onClose}
-              className="w-full py-2.5 text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+              className="w-full py-2.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
             >
               Continuar como invitado
             </button>
@@ -302,21 +307,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   <div className="font-bold text-neutral-900 dark:text-white">
                     {profile.username}
                   </div>
-                  <div className="text-xs text-neutral-500">{profile.email}</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">{profile.email}</div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center text-xs">
                 <div>
                   <div className="font-black text-lg text-amber-500">{profile.level}</div>
-                  <div className="text-neutral-500">Nivel</div>
+                  <div className="text-neutral-500 dark:text-neutral-400">Nivel</div>
                 </div>
                 <div>
                   <div className="font-black text-lg text-indigo-500">{profile.xp}</div>
-                  <div className="text-neutral-500">XP</div>
+                  <div className="text-neutral-500 dark:text-neutral-400">XP</div>
                 </div>
                 <div>
                   <div className="font-black text-lg text-emerald-500">{testHistory.length}</div>
-                  <div className="text-neutral-500">Tests</div>
+                  <div className="text-neutral-500 dark:text-neutral-400">Tests</div>
                 </div>
               </div>
             </div>
@@ -331,7 +336,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <button
               onClick={handleLogoutAll}
               disabled={loading}
-              className="w-full py-2.5 text-xs font-medium text-neutral-500 hover:text-rose-500 transition-colors"
+              className="w-full py-2.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-rose-500 transition-colors"
             >
               Cerrar sesión en todos los dispositivos
             </button>

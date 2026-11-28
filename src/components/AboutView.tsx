@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { AUTHOR, OG_IMAGE } from '../seo/site';
 import {
   Info,
   Code2,
@@ -10,10 +11,16 @@ import {
   BookOpen,
 } from 'lucide-react';
 
-type Section = 'about' | 'features' | 'privacy' | 'contact';
+export type AboutSection = 'about' | 'features' | 'privacy' | 'contact';
+type Section = AboutSection;
 
-export const AboutView: React.FC = () => {
-  const [section, setSection] = useState<Section>('about');
+interface AboutViewProps {
+  section: Section;
+  /** La privacidad tiene URL propia (/privacidad), así que el cambio de sección lo gestiona App */
+  onSectionChange: (section: Section) => void;
+}
+
+export const AboutView: React.FC<AboutViewProps> = ({ section, onSectionChange }) => {
 
   const tabs: { id: Section; label: string; icon: React.ReactNode }[] = [
     { id: 'about', label: 'Acerca de', icon: <Info className="w-3.5 h-3.5" /> },
@@ -36,7 +43,8 @@ export const AboutView: React.FC = () => {
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setSection(t.id)}
+            onClick={() => onSectionChange(t.id)}
+            aria-pressed={section === t.id}
             className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors ${
               section === t.id
                 ? 'bg-amber-500 text-neutral-950'
@@ -51,6 +59,29 @@ export const AboutView: React.FC = () => {
 
       {section === 'about' && (
         <div className="space-y-6 text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+          {/*
+            Imagen social (Open Graph) adaptada al contenedor. width/height explícitos → el navegador reserva
+            la proporción 1200:630 antes de descargar (sin CLS); WebP responsive (17 KB / 36 KB) con PNG de respaldo.
+          */}
+          <figure className="overflow-hidden rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-neutral-900">
+            <picture>
+              <source
+                type="image/webp"
+                srcSet="/og-image-600.webp 600w, /og-image-1200.webp 1200w"
+                sizes="(min-width: 896px) 848px, calc(100vw - 48px)"
+              />
+              <img
+                src="/og-image.png"
+                width={OG_IMAGE.width}
+                height={OG_IMAGE.height}
+                alt={OG_IMAGE.alt}
+                decoding="async"
+                fetchPriority="high"
+                className="block w-full h-auto"
+              />
+            </picture>
+          </figure>
+
           <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 p-6">
             <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3">
               ¿Qué es TypeMaster?
@@ -90,7 +121,7 @@ export const AboutView: React.FC = () => {
             </ul>
           </div>
 
-          <p className="text-xs text-neutral-500 text-center pt-4">
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 text-center pt-4">
             Autor: Aitor Sánchez Gutiérrez. © 2026 — Todos los derechos reservados.
           </p>
         </div>
@@ -104,7 +135,7 @@ export const AboutView: React.FC = () => {
             </h3>
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500">
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400">
                   <th className="py-2 pr-4 font-semibold">Función</th>
                   <th className="py-2 px-2 font-semibold text-center">Invitado</th>
                   <th className="py-2 px-2 font-semibold text-center">Registrado</th>
@@ -143,7 +174,7 @@ export const AboutView: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            <p className="text-[11px] text-neutral-500 mt-4">
+            <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-4">
               La cuenta registrada usa email y contraseña (sin verificación de correo en esta
               versión). La sesión se gestiona con un token JWT almacenado en tu navegador.
             </p>
@@ -171,7 +202,7 @@ export const AboutView: React.FC = () => {
             <h3 className="text-xl font-bold text-neutral-900 dark:text-white">
               Política de Privacidad
             </h3>
-            <p className="text-xs text-neutral-500 mt-1">Última actualización: 25/11/2026</p>
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">Última actualización: 26/11/2026</p>
           </div>
 
           <section>
@@ -183,7 +214,7 @@ export const AboutView: React.FC = () => {
               <br />
               Correo:{' '}
               <a
-                className="text-amber-600 dark:text-amber-400 underline"
+                className="text-inherit no-underline hover:underline underline-offset-2"
                 href="mailto:blog.cottage627@passinbox.com"
               >
                 blog.cottage627@passinbox.com
@@ -191,7 +222,7 @@ export const AboutView: React.FC = () => {
               <br />
               Web:{' '}
               <a
-                className="text-amber-600 dark:text-amber-400 underline"
+                className="text-inherit no-underline hover:underline underline-offset-2"
                 href="https://aitorsanchez.pages.dev/contacto"
                 target="_blank"
                 rel="noreferrer"
@@ -213,7 +244,9 @@ export const AboutView: React.FC = () => {
             <p className="mb-2">
               <strong>Cuenta registrada (opcional):</strong> nombre de usuario, correo electrónico
               y hash de contraseña (PBKDF2; la contraseña en claro no se almacena). Historial de
-              tests, XP y preferencias asociadas a tu cuenta en Neon PostgreSQL.
+              tests (con sus métricas de velocidad y pulsaciones), XP, estadísticas por tecla del
+              entrenamiento adaptativo, logros desbloqueados y preferencias asociadas a tu cuenta
+              en Neon PostgreSQL.
             </p>
             <p>
               Los invitados solo conservan datos en el almacenamiento local del navegador
@@ -281,14 +314,14 @@ export const AboutView: React.FC = () => {
             <p>
               Acceso, rectificación, supresión, limitación, oposición y portabilidad. Escríbenos a{' '}
               <a
-                className="text-amber-600 dark:text-amber-400 underline"
+                className="text-inherit no-underline hover:underline underline-offset-2"
                 href="mailto:blog.cottage627@passinbox.com"
               >
                 blog.cottage627@passinbox.com
               </a>
               . También puedes reclamar ante la AEPD (
               <a
-                className="text-amber-600 dark:text-amber-400 underline"
+                className="text-inherit no-underline hover:underline underline-offset-2"
                 href="https://www.aepd.es"
                 target="_blank"
                 rel="noreferrer"
@@ -337,15 +370,15 @@ export const AboutView: React.FC = () => {
             {[
               {
                 label: 'Blog',
-                href: 'https://aitorsanchez.pages.dev/',
+                href: AUTHOR.blogUrl,
               },
               {
                 label: 'Aitor Hub',
-                href: 'https://aitorhub.vercel.app/',
+                href: AUTHOR.hubUrl,
               },
               {
                 label: 'Contacto',
-                href: 'https://aitorsanchez.pages.dev/contacto/',
+                href: AUTHOR.contactUrl,
               },
               {
                 label: 'Email',
@@ -356,8 +389,8 @@ export const AboutView: React.FC = () => {
                 <a
                   href={link.href}
                   target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 text-amber-600 dark:text-amber-400 hover:underline font-medium"
+                  rel={link.label === 'Blog' ? 'author noopener' : 'noopener'}
+                  className="flex items-center gap-2 text-amber-700 dark:text-amber-400 hover:underline font-medium"
                 >
                   <ExternalLink className="w-4 h-4" />
                   {link.label}
@@ -368,7 +401,7 @@ export const AboutView: React.FC = () => {
               </li>
             ))}
           </ul>
-          <p className="text-xs text-neutral-500 pt-4 border-t border-neutral-200 dark:border-neutral-800">
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 pt-4 border-t border-neutral-200 dark:border-neutral-800">
             Autor: Aitor Sánchez Gutiérrez. © 2026 — Todos los derechos reservados.
           </p>
         </div>

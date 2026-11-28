@@ -76,7 +76,7 @@ export const AdaptiveView: React.FC = () => {
             </div>
           ))}
           {nextLetter && (
-            <div className="w-10 h-10 rounded-xl bg-neutral-800/40 text-neutral-500 font-mono font-bold flex items-center justify-center border border-dashed border-neutral-700">
+            <div className="w-10 h-10 rounded-xl bg-neutral-800/40 text-neutral-500 dark:text-neutral-400 font-mono font-bold flex items-center justify-center border border-dashed border-neutral-700">
               {nextLetter.toUpperCase()}
             </div>
           )}
@@ -97,11 +97,11 @@ export const AdaptiveView: React.FC = () => {
               className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
                 stat.unlocked
                   ? 'bg-neutral-50 dark:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700'
-                  : 'bg-neutral-100/50 dark:bg-neutral-950/50 border-neutral-200 dark:border-neutral-800 opacity-50'
+                  : 'bg-neutral-100/50 dark:bg-neutral-950/50 border-neutral-200 dark:border-neutral-800'
               }`}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-lg font-mono font-bold uppercase text-neutral-900 dark:text-white">{stat.key}</span>
+                <span className={`text-lg font-mono font-bold uppercase text-neutral-900 dark:text-white ${stat.unlocked ? '' : 'opacity-40'}`}>{stat.key}</span>
                 {stat.unlocked ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 ) : (
@@ -109,7 +109,7 @@ export const AdaptiveView: React.FC = () => {
                 )}
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between text-xs text-neutral-500">
+                <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
                   <span>Confianza</span>
                   <span className="font-semibold text-neutral-900 dark:text-white">{Math.round(stat.confidence * 100)}%</span>
                 </div>

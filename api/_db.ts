@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { randomUUID } from 'crypto';
-import type { CleanProfile, CleanTest } from './_validate.js';
+import type { CleanKeyStat, CleanProfile, CleanTest } from './_validate.js';
 
 export type DbTestRecord = CleanTest & { userId?: string };
 
@@ -27,7 +27,13 @@ const today = () => new Date().toISOString().split('T')[0];
 const localMemoryDb = {
   users: {} as Record<string, DbUserProfile>,
   tests: [] as DbTestRecord[],
+  progress: {} as Record<string, DbProgress>,
 };
+
+export interface DbProgress {
+  keyStats: Record<string, CleanKeyStat>;
+  achievements: string[];
+}
 
 function stripPassword(user: DbUserProfile): DbUserProfile {
   const { passwordHash: _p, tokenVersion: _t, ...rest } = user;
@@ -277,4 +283,85 @@ export async function incrementTokenVersion(userId: string): Promise<number> {
     RETURNING token_version AS tv
   `;
   return rows.length > 0 ? Number(rows[0].tv) || 0 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Progreso adaptativo (key_stats) y logros (achievements)
+// ---------------------------------------------------------------------------
+
+export async function fetchProgress(userId: string): Promise<DbProgress> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    return localMemoryDb.progress[userId] ?? { keyStats: {}, achievements: [] };
+  }
+
+  const [keyRows, achRows] = await Promise.all([
+    sql`
+      SELECT key_char AS key, samples, avg_ms::float8 AS "avgMs", ema_ms::float8 AS "emaMs",
+             errors, confidence::float8 AS confidence, unlocked
+      FROM key_stats WHERE user_id = ${userId}
+    `,
+    sql`SELECT achievement_id AS id FROM achievements WHERE user_id = ${userId} AND unlocked = TRUE`,
+  ]);
+
+  const keyStats: Record<string, CleanKeyStat> = {};
+  for (const r of keyRows as any[]) keyStats[r.key] = r as CleanKeyStat;
+  return { keyStats, achievements: (achRows as any[]).map((r) => String(r.id)) };
+}
+
+/**
+ * Fusiona (nunca retrocede): por tecla gana el registro con más muestras, `unlocked` es una unión,
+ * y los logros solo se añaden. Es idempotente, así que reenviar el mismo estado es seguro.
+ */
+export async function saveProgress(
+  userId: string,
+  keyStats: CleanKeyStat[],
+  achievementIds: string[]
+): Promise<void> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    const cur = localMemoryDb.progress[userId] ?? { keyStats: {}, achievements: [] };
+    for (const k of keyStats) {
+      const old = cur.keyStats[k.key];
+      const richer = !old || k.samples > old.samples ? k : old;
+      cur.keyStats[k.key] = { ...richer, samples: Math.max(k.samples, old?.samples ?? 0), unlocked: k.unlocked || !!old?.unlocked };
+    }
+    cur.achievements = [...new Set([...cur.achievements, ...achievementIds])];
+    localMemoryDb.progress[userId] = cur;
+    return;
+  }
+
+  await Promise.all([
+    ...keyStats.map(
+      (k) => sql`
+        INSERT INTO key_stats (user_id, key_char, samples, avg_ms, ema_ms, errors, confidence, unlocked)
+        VALUES (${userId}, ${k.key}, ${k.samples}, ${k.avgMs}, ${k.emaMs}, ${k.errors}, ${k.confidence}, ${k.unlocked})
+        ON CONFLICT (user_id, key_char) DO UPDATE SET
+          avg_ms     = CASE WHEN EXCLUDED.samples > key_stats.samples THEN EXCLUDED.avg_ms     ELSE key_stats.avg_ms     END,
+          ema_ms     = CASE WHEN EXCLUDED.samples > key_stats.samples THEN EXCLUDED.ema_ms     ELSE key_stats.ema_ms     END,
+          errors     = CASE WHEN EXCLUDED.samples > key_stats.samples THEN EXCLUDED.errors     ELSE key_stats.errors     END,
+          confidence = CASE WHEN EXCLUDED.samples > key_stats.samples THEN EXCLUDED.confidence ELSE key_stats.confidence END,
+          samples    = GREATEST(key_stats.samples, EXCLUDED.samples),
+          unlocked   = key_stats.unlocked OR EXCLUDED.unlocked,
+          updated_at = CURRENT_TIMESTAMP
+      `
+    ),
+    ...achievementIds.map(
+      (id) => sql`
+        INSERT INTO achievements (user_id, achievement_id, unlocked)
+        VALUES (${userId}, ${id}, TRUE)
+        ON CONFLICT (user_id, achievement_id) DO NOTHING
+      `
+    ),
+  ]);
+}
+
+/** Reinicio explícito del entrenamiento adaptativo (los logros se conservan). */
+export async function resetKeyStats(userId: string): Promise<void> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    if (localMemoryDb.progress[userId]) localMemoryDb.progress[userId].keyStats = {};
+    return;
+  }
+  await sql`DELETE FROM key_stats WHERE user_id = ${userId}`;
 }

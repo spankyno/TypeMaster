@@ -1,7 +1,7 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTypingStore } from '../store/useTypingStore';
 import { VirtualKeyboard } from './VirtualKeyboard';
-import { TestResultModal } from './TestResultModal';
+import { TestResultModal, preloadResult } from '../lazyViews';
 import { CustomTextModal } from './CustomTextModal';
 import {
   Clock,
@@ -145,6 +145,11 @@ export const TypingArea: React.FC = () => {
   const windowed = settings.mode === 'time' || targetText.length > WINDOW_THRESHOLD;
   const viewportRef = useRef<HTMLDivElement>(null);
 
+  // Mientras el usuario escribe, el navegador descarga (en ocio) el chunk del resultado + gráfica
+  useEffect(() => {
+    if (status === 'running') preloadResult();
+  }, [status]);
+
   useLayoutEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !windowed) return;
@@ -219,7 +224,7 @@ export const TypingArea: React.FC = () => {
   const toggleBtn = (active: boolean) =>
     active
       ? 'bg-amber-500 text-neutral-950 font-bold'
-      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white';
+      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white';
 
   return (
     <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col items-center justify-center min-h-[75vh]">
@@ -241,7 +246,9 @@ export const TypingArea: React.FC = () => {
 
       {/* Results View if Finished */}
       {status === 'finished' ? (
-        <TestResultModal onRetry={() => initTest()} onNextTest={() => initTest()} />
+        <Suspense fallback={<div className="w-full min-h-[480px]" aria-busy="true" />}>
+          <TestResultModal onRetry={() => initTest()} onNextTest={() => initTest()} />
+        </Suspense>
       ) : (
         <div className="w-full flex flex-col items-center gap-8">
           {/* Mode Selector Toolbar */}
@@ -251,11 +258,11 @@ export const TypingArea: React.FC = () => {
             }`}
           >
             {/* Modes — updateSettings already regenerates text; no extra initTest */}
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-center gap-1">
               <button
                 onClick={() => updateSettings({ mode: 'time' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'time' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'time' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" /> Tiempo
@@ -263,7 +270,7 @@ export const TypingArea: React.FC = () => {
               <button
                 onClick={() => updateSettings({ mode: 'words' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'words' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'words' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <Hash className="w-3.5 h-3.5" /> Palabras
@@ -271,7 +278,7 @@ export const TypingArea: React.FC = () => {
               <button
                 onClick={() => updateSettings({ mode: 'quote' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'quote' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'quote' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <AlignLeft className="w-3.5 h-3.5" /> Citas
@@ -279,7 +286,7 @@ export const TypingArea: React.FC = () => {
               <button
                 onClick={() => updateSettings({ mode: 'prose' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'prose' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'prose' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" /> Prosa
@@ -287,7 +294,7 @@ export const TypingArea: React.FC = () => {
               <button
                 onClick={() => updateSettings({ mode: 'adaptive' })}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'adaptive' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'adaptive' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Adaptativo
@@ -295,7 +302,7 @@ export const TypingArea: React.FC = () => {
               <button
                 onClick={() => setIsCustomModalOpen(true)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  settings.mode === 'custom' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                  settings.mode === 'custom' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5" /> Personalizado

@@ -50,31 +50,31 @@ export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNex
       {/* Main Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">PPM Neto (WPM)</div>
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">PPM Neto (WPM)</div>
           <div className="text-4xl font-black text-amber-500 tracking-tight">{wpm}</div>
           <div className="text-xs text-neutral-400 mt-1">Bruto: {rawWpm} PPM</div>
         </div>
 
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Pulsaciones/min</div>
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Pulsaciones/min</div>
           <div className="text-4xl font-black text-sky-600 dark:text-sky-400 tracking-tight">{kpm}</div>
           <div className="text-xs text-neutral-400 mt-1">KPM · {keystrokes} pulsaciones</div>
         </div>
 
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Precisión</div>
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Precisión</div>
           <div className="text-4xl font-black text-indigo-600 dark:text-indigo-400 tracking-tight">{accuracy}%</div>
           <div className="text-xs text-neutral-400 mt-1">Objetivo: &gt;95%</div>
         </div>
 
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Consistencia</div>
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Consistencia</div>
           <div className="text-4xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{consistency}%</div>
           <div className="text-xs text-neutral-400 mt-1">Ritmo uniforme</div>
         </div>
 
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Caracteres</div>
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Caracteres</div>
           <div className="text-2xl font-bold text-neutral-900 dark:text-white tracking-tight mt-1">
             <span className="text-emerald-500">{charsCorrect}</span> / <span className="text-rose-500">{charsWrong}</span> / <span className="text-amber-500">{charsExtra}</span>
           </div>
@@ -85,7 +85,7 @@ export const TestResultModal: React.FC<TestResultModalProps> = ({ onRetry, onNex
       {/* WPM Chart Timeline */}
       {chartData.length > 1 && (
         <div className="bg-neutral-50 dark:bg-neutral-800/30 p-6 rounded-2xl border border-neutral-100 dark:border-neutral-800 mb-8">
-          <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Activity className="w-4 h-4 text-amber-500" />
             Evolución de PPM por Segundo
           </div>

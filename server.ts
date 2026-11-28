@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import authHandler from './api/auth.js';
 import testsHandler from './api/tests.js';
 import userHandler from './api/user.js';
+import progressHandler from './api/progress.js';
 import healthHandler from './api/health.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ const wrap =
 app.all('/api/auth', wrap(authHandler));
 app.all('/api/tests', wrap(testsHandler));
 app.all('/api/user', wrap(userHandler));
+app.all('/api/progress', wrap(progressHandler));
 app.all('/api/health', wrap(healthHandler));
 app.all('/api/*', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -41,8 +43,9 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+    // URLs limpias (/acerca-de → acerca-de.html) y 404 real para rutas desconocidas (igual que en Vercel)
+    app.use(express.static(distDir, { extensions: ['html'] }));
+    app.use((_req, res) => res.status(404).sendFile(path.join(distDir, '404.html')));
   }
 
   app.listen(PORT, '0.0.0.0', () => {

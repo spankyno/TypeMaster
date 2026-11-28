@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeTest, sanitizeProfile, validateRegistration } from './_validate.ts';
+import { sanitizeTest, sanitizeProfile, validateRegistration, sanitizeKeyStats, sanitizeAchievementIds } from './_validate.ts';
 import { hashPassword, verifyPassword, needsRehash, signToken, verifyToken, extractToken } from './_authHelpers.ts';
 
 const good = { id: 'test_abcdef123456', mode: 'time', subMode: 30, wpm: 60, rawWpm: 65, accuracy: 96, consistency: 80, durationSeconds: 30, wpmSeries: [50, 60], createdAt: new Date().toISOString() };
@@ -59,4 +59,24 @@ test('sanitizeTest: KPM y pulsaciones se acotan; si faltan se estiman', () => {
   const legacy = sanitizeTest(good)!; // cliente antiguo: rawWpm 65 → 325 KPM
   assert.equal(legacy.kpm, 325);
   assert.equal(legacy.keystrokes, 163);
+});
+
+test('sanitizeKeyStats: solo letras válidas, valores acotados, errores ≤ muestras', () => {
+  const out = sanitizeKeyStats({
+    a: { samples: 50, avgMs: 180.456, emaMs: 170, errors: 3, confidence: 0.8, unlocked: true },
+    ñ: { samples: 10, errors: 999, confidence: 7 },
+    '1': { samples: 5 },
+    zz: { samples: 5 },
+    e: { samples: 'x' },
+  });
+  assert.deepEqual(out.map((k) => k.key).sort(), ['a', 'ñ']);
+  const ñ = out.find((k) => k.key === 'ñ')!;
+  assert.equal(ñ.errors, 10);
+  assert.equal(ñ.confidence, 1);
+  assert.equal(out.find((k) => k.key === 'a')!.avgMs, 180.46);
+  assert.deepEqual(sanitizeKeyStats(null), []);
+});
+test('sanitizeAchievementIds: formato seguro y sin duplicados', () => {
+  assert.deepEqual(sanitizeAchievementIds(['wpm_50', 'wpm_50', "x'; DROP", 5, 'streak_3']), ['wpm_50', 'streak_3']);
+  assert.deepEqual(sanitizeAchievementIds('nope'), []);
 });

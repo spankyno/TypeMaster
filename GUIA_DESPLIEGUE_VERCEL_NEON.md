@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS tests (
   sub_mode VARCHAR(50) NOT NULL,
   wpm INTEGER NOT NULL,
   raw_wpm INTEGER NOT NULL,
+  kpm INTEGER NOT NULL DEFAULT 0,          -- pulsaciones por minuto
+  keystrokes INTEGER NOT NULL DEFAULT 0,   -- total de pulsaciones
   accuracy INTEGER NOT NULL,
   consistency INTEGER NOT NULL,
   chars_correct INTEGER NOT NULL DEFAULT 0,
@@ -171,7 +173,7 @@ Si el proyecto no está aún en GitHub:
 7. Vercel comenzará el proceso de compilación:
    - Descargará las dependencias.
    - Ejecutará Vite build empaquetando los activos estáticos y optimizando los chunks.
-   - Configurará las funciones Serverless de `/api` (`/api/tests`, `/api/user`, `/api/health`).
+   - Configurará las funciones Serverless de `/api` (`/api/auth`, `/api/tests`, `/api/user`, `/api/progress`, `/api/health`).
    - El proceso tarda aproximadamente 30 a 50 segundos.
 
 ---
@@ -195,6 +197,19 @@ Si el proyecto no está aún en GitHub:
    - Al finalizar el test, comprueba que se registran las métricas (PPM, Precisión, XP).
    - Ve a la pestaña **"Estadísticas"** y comprueba que el historial muestra el test completado.
    - Si quieres verificarlo en Neon: abre la consola de Neon, ve a **"Tables"** -> tabla `tests` -> pulsa en los datos y verás el registro insertado en tiempo real.
+
+5. **Verificación SEO** (tras cada despliegue importante):
+   ```bash
+   curl -sI https://tu-app.vercel.app/acerca-de        # 200 (URL limpia, sin .html)
+   curl -sI https://tu-app.vercel.app/no-existe        # 404 real
+   curl -s  https://tu-app.vercel.app/robots.txt       # Disallow: /api/ + Sitemap
+   curl -s  https://tu-app.vercel.app/sitemap.xml      # 4 URLs indexables
+   curl -s  https://tu-app.vercel.app/acerca-de | grep -E '<title>|canonical|og:image|ld\+json'
+   ```
+   - **Google Search Console**: la propiedad ya se verifica con la etiqueta `google-site-verification` del `<head>`. Envía `https://tu-app.vercel.app/sitemap.xml` en *Sitemaps* y solicita indexación de `/`.
+   - **Open Graph / Twitter**: valida con el *Facebook Sharing Debugger* (pulsa «Scrape Again»), *LinkedIn Post Inspector* y un tuit de prueba. Las redes **cachean** la imagen: tras cambiarla hay que volver a rastrear.
+   - **Datos estructurados**: pega la URL en el *Rich Results Test* y en validator.schema.org.
+   - **Core Web Vitals reales**: aparecen en Search Console (informe «Experiencia») tras ~28 días de tráfico; en local usa Lighthouse en modo móvil.
 
 ---
 
@@ -226,4 +241,4 @@ Si el proyecto no está aún en GitHub:
 - **Solución**: Entra en [https://console.neon.tech](https://console.neon.tech), entra a **SQL Editor**, pega el contenido de `schema.sql` y pulsa **Run**.
 
 ### 3. Error 404 al recargar páginas secundarias
-- **Solución**: Ya está resuelto mediante el archivo `vercel.json` incluido en el repositorio, el cual redirige las rutas al punto de entrada SPA (`index.html`) manteniendo las rutas `/api/*` operativas.
+- **Solución**: cada vista tiene su propio HTML estático generado en el build (`dist/acerca-de.html`, `dist/privacidad.html`…) y `vercel.json` activa `cleanUrls`, por lo que `/acerca-de` se sirve directamente. Ya **no** hay un rewrite general a `index.html`: una ruta inexistente devuelve un 404 real (`404.html`). Si añades una vista nueva, defínela en `src/seo/routes.ts` para que el build genere su página.

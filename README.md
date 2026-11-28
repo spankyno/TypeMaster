@@ -115,18 +115,46 @@ Guía detallada de despliegue: [`GUIA_DESPLIEGUE_VERCEL_NEON.md`](./GUIA_DESPLIE
 | `/api/auth` | GET | JWT | Sesión actual |
 | `/api/tests` | GET / POST | JWT | Historial / guardar test (objeto o array de hasta 100; idempotente por `id`) |
 | `/api/user` | GET / POST | JWT | Perfil |
+| `/api/progress` | GET / POST / DELETE | JWT | Estadísticas por tecla (modo adaptativo) y logros; POST fusiona sin retroceder, DELETE reinicia el adaptativo |
 | `/api/health` | GET | — | Estado de Neon |
 
 ---
 
+## SEO y rendimiento
+
+**URLs reales por vista** (History API, sin `#`): `/` (práctica), `/adaptativo`, `/acerca-de`, `/privacidad` (indexables) y `/estadisticas` (`noindex`: es contenido personal). Una ruta desconocida devuelve un **404 real** (`public/404.html`).
+
+| Qué | Dónde |
+|---|---|
+| Constantes del sitio (URL, autor, enlaces, imagen OG, verificación de Google) | `src/seo/site.ts` |
+| Rutas: título, descripción, `lastmod`, indexable | `src/seo/routes.ts` — **actualiza `lastmod` cuando cambies el contenido de una página** |
+| Metadatos (`<title>`, description, canonical, hreflang, robots, Open Graph, Twitter) | `src/seo/head.ts` |
+| Datos estructurados JSON-LD (`WebSite`, `WebApplication`, `Person`, `ImageObject`, `AboutPage`, `BreadcrumbList`, `ContactPage`…) | `src/seo/jsonld.ts` |
+| Plugin de Vite: inyecta el `<head>`, **prerenderiza un HTML por ruta** (`dist/acerca-de.html`…) y genera `sitemap.xml` | `vite-plugins/seo.ts` |
+| `robots.txt`, `manifest.webmanifest`, iconos, imágenes OG | `public/` |
+| Fuentes de la imagen OG y de los iconos (HTML/SVG) | `design/` |
+
+Los rastreadores y los bots de redes sociales reciben los metadatos correctos **sin ejecutar JavaScript** (cada ruta tiene su HTML estático); en la navegación del lado cliente `applyHead` actualiza `<title>`, canonical, OG y JSON-LD.
+
+**Regenerar la imagen OG (1200×630) y los iconos:** edita `design/og-image.html` o `design/icon*.svg`, haz una captura a 1200×630 con cualquier navegador headless (p. ej. Playwright/Puppeteer) y guárdala como `public/og-image.png` (conviene cuantizar el PNG a 256 colores: ~30 KB). `og-image-1200.webp` y `og-image-600.webp` son las variantes responsive que usa la página «Acerca de».
+
+**Rendimiento / cuota** — decisiones tomadas:
+- Vistas y modales con `React.lazy`: **recharts (~107 KB gz) ya no se descarga en la home**; se precarga mientras escribes y al pasar el ratón por los enlaces.
+- Sin fuentes web (pila del sistema) ni imágenes en la home → sin CLS ni peticiones extra; la imagen de «Acerca de» lleva `width`/`height`, `srcset` WebP y PNG de respaldo.
+- La analítica (tracker de Cloudflare Worker) se carga **tras `load` y en un momento ocioso**, y **no se carga para rastreadores** (ahorra peticiones/cuota del Worker).
+- `/api/health` ya **no se llama en cada visita**: es superficial (no toca la BD) salvo `?deep=1`, que solo se usa al abrir el panel de cuenta; además se cachea 60 s en el CDN. Así los bots y las ráfagas de visitas no despiertan Neon (compute) ni disparan funciones serverless. `robots.txt` bloquea `/api/` y la API responde `X-Robots-Tag: noindex`.
+- No se usa Vercel Image Optimization, Speed Insights ni **middleware** (no existe `middleware.ts`): cero invocaciones de Edge. Si algún día lo añades, excluye assets y API con un matcher del tipo `'/((?!api|assets|.*\\..*).*)'`.
+- Caché: `/assets/*` inmutable 1 año; imágenes, iconos y `robots`/`sitemap`/`manifest` con `s-maxage` + `stale-while-revalidate` (ver `vercel.json`).
+
 ## Scripts
 
 ```bash
-npm run dev       # servidor de desarrollo integrado
-npm run build     # build de producción
-npm run preview   # previsualizar build
-npm run lint      # tsc --noEmit
-npm test          # tests unitarios (node:test + tsx)
+npm run dev        # servidor de desarrollo integrado
+npm run build      # build de producción (incluye prerender por ruta + sitemap)
+npm run preview    # previsualizar build
+npm run lint       # tsc --noEmit
+npm test           # tests unitarios (node:test + tsx), incluye SEO / JSON-LD
+npm run check:seo  # tras `npm run build`: verifica el HTML generado en dist/
 ```
 
 ---

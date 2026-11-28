@@ -23,6 +23,7 @@ export const DesktopWarning: React.FC = () => {
       </div>
       <button
         onClick={() => setShow(false)}
+        aria-label="Cerrar aviso"
         className="p-1 rounded-lg hover:bg-black/10 transition-colors shrink-0"
       >
         <X className="w-4 h-4" />

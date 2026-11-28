@@ -269,6 +269,19 @@ export class AdaptiveEngine {
     };
   }
 
+  /** Importa estadísticas (p. ej. fusionadas con la nube). Las teclas iniciales nunca quedan bloqueadas. */
+  public loadKeyStats(saved: Record<string, KeyRecord>) {
+    for (const letter of ALL_LETTERS) {
+      const rec = saved[letter];
+      if (!rec) continue;
+      this.keyStats[letter] = {
+        ...rec,
+        key: letter,
+        unlocked: rec.unlocked || INITIAL_UNLOCKED_LETTERS.includes(letter),
+      };
+    }
+  }
+
   /** Reset adaptive progress (keys locked again except starters). */
   public resetProgress() {
     for (const letter of ALL_LETTERS) {

@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import confetti from 'canvas-confetti';
 import { TestSettings, TestResult, UserProfile, Achievement, DbConnectionStatus } from '../types';
 import { SPANISH_WORDS, SPANISH_QUOTES, SPANISH_PROSE } from '../data/spanishWords';
 import { AdaptiveEngine, KeyRecord } from '../lib/adaptive/adaptiveEngine';
 import { soundEngine } from '../lib/engine/soundEngine';
 
+import { mergeProgress, normalizeKeyStats, uploadablePayload, type Progress } from '../lib/progress';
 import {
   calcWpm,
   calcKpm,
@@ -87,6 +87,10 @@ interface TypingState {
   tickTimer: () => void;
   finishTest: () => void;
   loadSavedData: () => Promise<void>;
+  /** Descarga el progreso de la nube, lo fusiona con el local y sube lo que falte */
+  syncProgress: () => Promise<void>;
+  /** Sube el progreso local (el servidor fusiona sin retroceder) */
+  pushProgress: () => Promise<void>;
   /** Login with email + password */
   loginUser: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   /** Register with username, email + password */
@@ -138,6 +142,11 @@ function mergeHistories(local: TestResult[], cloud: TestResult[], userId: string
   );
   return { merged, toUpload };
 }
+
+const authJson = (token: string) => ({
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${token}`,
+});
 
 function uploadTests(token: string, tests: TestResult[]) {
   if (tests.length === 0) return;
@@ -308,7 +317,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
     lastKeyError: false,
     lastKeyTime: null,
 
-    dbStatus: 'checking',
+    // Los invitados usan solo localStorage: no se consulta la BD (cada consulta despierta Neon y gasta cuota)
+    dbStatus: savedProfile.isGuest ? 'offline' : 'checking',
     isAuthModalOpen: false,
     isAchievementsModalOpen: false,
     authToken: (() => {
@@ -324,7 +334,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     checkDbConnection: async () => {
       try {
-        const res = await fetch('/api/health');
+        const res = await fetch('/api/health?deep=1');
         if (res.ok) {
           const data = await res.json();
           if (data?.database?.connected) {
@@ -350,6 +360,11 @@ export const useTypingStore = create<TypingState>((set, get) => {
       } catch {
         // ignore
       }
+      // Si hay sesión, el reinicio también se aplica en la nube (si no, la siguiente sincronización lo restauraría)
+      const token = get().authToken;
+      if (token && !state.profile.isGuest) {
+        fetch('/api/progress', { method: 'DELETE', headers: authJson(token) }).catch(() => {});
+      }
       // Trigger subscribers (engine is mutated in place)
       set({ adaptiveEngine: state.adaptiveEngine });
       if (state.settings.mode === 'adaptive') {
@@ -359,7 +374,8 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     loadSavedData: async () => {
       const state = get();
-      state.checkDbConnection();
+      // Sin llamada a /api/health aquí: lo hace AuthModal al abrirse. Para usuarios con sesión,
+      // las propias peticiones de datos (abajo) determinan el estado de la conexión.
 
       const token = state.authToken || localStorage.getItem('typemaster_token');
       // Guests only use localStorage — no cloud sync
@@ -375,6 +391,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
       try {
         const testsRes = await fetch('/api/tests', { headers: authHeaders });
         if (testsRes.ok) {
+          set({ dbStatus: 'connected' });
           const apiTests = ((await testsRes.json()) as unknown[]).map(normalizeTest);
           if (apiTests.length > 0) {
             set((currentState) => {
@@ -414,8 +431,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
             });
           }
         }
+
+        // Progreso adaptativo y logros
+        await get().syncProgress();
       } catch (e) {
         // Fallback local
+        set({ dbStatus: 'offline' });
       }
     },
 
@@ -461,6 +482,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
         }
 
         uploadTests(token, toUpload);
+        void get().syncProgress();
         if (toUpload.length > 0) {
           fetch('/api/user', {
             method: 'POST',
@@ -515,8 +537,9 @@ export const useTypingStore = create<TypingState>((set, get) => {
           // ignore
         }
 
-        // Subir el historial que ya tenías en este navegador
+        // Subir el historial y el progreso que ya tenías en este navegador
         uploadTests(token, toUpload);
+        void get().syncProgress();
         fetch('/api/user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -529,6 +552,75 @@ export const useTypingStore = create<TypingState>((set, get) => {
           success: false,
           error: 'No se pudo conectar con el servidor. Comprueba tu conexión.',
         };
+      }
+    },
+
+    syncProgress: async () => {
+      const token = get().authToken || localStorage.getItem('typemaster_token');
+      const profile = get().profile;
+      if (!token || profile.isGuest || profile.id === 'guest') return;
+
+      try {
+        const res = await fetch('/api/progress', { headers: authJson(token) });
+        if (res.status === 401) {
+          get().logoutUser();
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        const cloud: Progress = {
+          keyStats: normalizeKeyStats(data?.keyStats),
+          achievements: Array.isArray(data?.achievements)
+            ? data.achievements.filter((x: unknown): x is string => typeof x === 'string')
+            : [],
+        };
+
+        const state = get();
+        const local: Progress = {
+          keyStats: state.adaptiveEngine.exportState().keyStats,
+          achievements: state.achievements.filter((a) => a.unlocked).map((a) => a.id),
+        };
+        const { merged, needsUpload } = mergeProgress(local, cloud);
+
+        // Aplica el resultado fusionado en este dispositivo
+        state.adaptiveEngine.loadKeyStats(merged.keyStats);
+        const achievements = state.achievements.map((a) =>
+          merged.achievements.includes(a.id) ? { ...a, unlocked: true } : a
+        );
+        safeSet('typemaster_keystats', state.adaptiveEngine.exportState().keyStats);
+        safeSet('typemaster_achievements', achievements);
+        set({ adaptiveEngine: state.adaptiveEngine, achievements });
+        if (get().settings.mode === 'adaptive' && get().status === 'idle') get().initTest();
+
+        if (needsUpload) {
+          await fetch('/api/progress', {
+            method: 'POST',
+            headers: authJson(token),
+            body: JSON.stringify(uploadablePayload(merged)),
+          });
+        }
+      } catch {
+        // sin conexión: el progreso local se sincroniza en la próxima ocasión
+      }
+    },
+
+    pushProgress: async () => {
+      const token = get().authToken;
+      const state = get();
+      if (!token || state.profile.isGuest || state.profile.id === 'guest') return;
+      try {
+        await fetch('/api/progress', {
+          method: 'POST',
+          headers: authJson(token),
+          body: JSON.stringify(
+            uploadablePayload({
+              keyStats: state.adaptiveEngine.exportState().keyStats,
+              achievements: state.achievements.filter((a) => a.unlocked).map((a) => a.id),
+            })
+          ),
+        });
+      } catch {
+        // se reintentará con el siguiente test
       }
     },
 
@@ -546,8 +638,22 @@ export const useTypingStore = create<TypingState>((set, get) => {
         minutesToday: 0,
         isGuest: true,
       };
-      set({ profile: guestUser, testHistory: [], authToken: null });
+      // El progreso pertenece a la cuenta (ya está en la nube): se limpia para no mezclarlo con otra cuenta
+      const engine = get().adaptiveEngine;
+      engine.resetProgress();
+      const freshAchievements = INITIAL_ACHIEVEMENTS.map((a) => ({ ...a }));
+      set({
+        profile: guestUser,
+        testHistory: [],
+        authToken: null,
+        adaptiveEngine: engine,
+        achievements: freshAchievements,
+      });
+      if (get().settings.mode === 'adaptive') get().initTest();
       try {
+        ['typemaster_keystats', 'typemaster_problemwords', 'typemaster_achievements'].forEach((k) =>
+          localStorage.removeItem(k)
+        );
         localStorage.removeItem('typemaster_token');
         localStorage.setItem('typemaster_profile', JSON.stringify(guestUser));
         localStorage.setItem('typemaster_history', JSON.stringify([]));
@@ -942,16 +1048,19 @@ export const useTypingStore = create<TypingState>((set, get) => {
       });
 
       if (isPersonalBest || newlyUnlocked.length > 0) {
-        try {
-          confetti({
+        // Carga diferida: la librería de confeti (solo se usa al batir récord) no pesa en la carga inicial
+        void import('canvas-confetti')
+          .then((m) =>
+            m.default({
             particleCount: isPersonalBest ? 120 : 70,
             spread: 70,
             origin: { y: 0.65 },
             colors: ['#f59e0b', '#6366f1', '#10b981', '#f43f5e'],
+          })
+          )
+          .catch(() => {
+            // el confeti es opcional
           });
-        } catch {
-          // confetti es opcional
-        }
       }
 
       const engineState = state.adaptiveEngine.exportState();
@@ -979,6 +1088,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
           .catch((err) => console.warn('[TypeMaster] Backend no alcanzable:', err));
 
         fetch('/api/user', { method: 'POST', headers: authHeaders, body: JSON.stringify(newProfile) }).catch(() => {});
+        void get().pushProgress();
       }
     },
   };

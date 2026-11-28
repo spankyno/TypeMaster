@@ -168,3 +168,47 @@ export function validateRegistration(body: any): {
   }
   return { ok: true, username, email, password };
 }
+
+export interface CleanKeyStat {
+  key: string;
+  samples: number;
+  avgMs: number;
+  emaMs: number;
+  errors: number;
+  confidence: number;
+  unlocked: boolean;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Acepta un objeto { a: {...}, ... } o un array; solo letras a–z y ñ, con valores acotados. */
+export function sanitizeKeyStats(raw: any): CleanKeyStat[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const entries: [string, any][] = Array.isArray(raw)
+    ? raw.map((r: any) => [String(r?.key ?? ''), r] as [string, any])
+    : Object.entries(raw);
+  const out = new Map<string, CleanKeyStat>();
+  for (const [k, v] of entries) {
+    const key = String(v?.key ?? k).toLowerCase();
+    if (!/^[a-zñ]$/.test(key) || !v || typeof v !== 'object') continue;
+    const samples = intInRange(v.samples, 0, 100_000_000);
+    if (samples === null) continue;
+    out.set(key, {
+      key,
+      samples,
+      avgMs: round2(Math.min(5000, Math.max(0, num(v.avgMs) ?? 0))),
+      emaMs: round2(Math.min(5000, Math.max(0, num(v.emaMs) ?? 300))),
+      errors: Math.min(samples, intInRange(v.errors, 0, 100_000_000) ?? 0),
+      confidence: Math.round(Math.min(1, Math.max(0, num(v.confidence) ?? 0)) * 1000) / 1000,
+      unlocked: v.unlocked === true,
+    });
+  }
+  return [...out.values()];
+}
+
+/** Ids de logros desbloqueados (máx. 100, formato seguro). */
+export function sanitizeAchievementIds(raw: any): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.filter((x: unknown): x is string => typeof x === 'string' && /^[a-z0-9_]{1,60}$/.test(x));
+  return [...new Set<string>(ids)].slice(0, 100);
+}

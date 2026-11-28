@@ -45,13 +45,13 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({ isOpen, on
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Logros y Nivel</h2>
-            <p className="text-sm text-neutral-500">Nivel actual: {profile.level} ({profile.xp} XP total)</p>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">Nivel actual: {profile.level} ({profile.xp} XP total)</p>
           </div>
         </div>
 
         {/* Progress Bar */}
         <div className="bg-neutral-50 dark:bg-neutral-800/50 p-5 rounded-2xl border border-neutral-100 dark:border-neutral-800 mb-6">
-          <div className="flex justify-between text-xs font-semibold text-neutral-500 mb-2">
+          <div className="flex justify-between text-xs font-semibold text-neutral-500 dark:text-neutral-400 mb-2">
             <span>Progreso hacia Nivel {profile.level + 1}</span>
             <span>{profile.xp % 500} / 500 XP</span>
           </div>

@@ -21,7 +21,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
 
   return (
     <div className="w-full max-w-3xl mx-auto bg-neutral-900/60 dark:bg-neutral-950/80 backdrop-blur-md p-4 rounded-3xl border border-neutral-800 shadow-xl select-none flex flex-col gap-1.5 items-center">
-      <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-1 font-semibold">
+      <div className="text-[10px] uppercase tracking-widest text-neutral-600 dark:text-neutral-400 mb-1 font-semibold">
         Teclado QWERTY ES (Distribución Física)
       </div>
       {QWERTY_ES_KEYS.map((row, rowIndex) => (
@@ -56,7 +56,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
               >
                 <span className="font-semibold">{item.key}</span>
                 {item.shift && item.shift !== item.key && (
-                  <span className="absolute top-1 right-1.5 text-[8px] text-neutral-500">{item.shift}</span>
+                  <span className="absolute top-1 right-1.5 text-[8px] text-neutral-600 dark:text-neutral-400">{item.shift}</span>
                 )}
               </div>
             );

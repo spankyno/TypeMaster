@@ -3,12 +3,14 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import { defineConfig } from 'vite';
+import { seoPlugin } from './vite-plugins/seo';
 
 export default defineConfig(() => {
   return {
     plugins: [
       react(),
       tailwindcss(),
+      seoPlugin(),
       // Copies src/assets into dist/ so root-relative URLs resolve in production builds
       {
         name: 'copy-unbundled-src-assets',
@@ -37,14 +39,8 @@ export default defineConfig(() => {
     },
     build: {
       chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'charts-vendor': ['recharts'],
-            'ui-vendor': ['lucide-react', 'canvas-confetti', 'motion'],
-          },
-        },
-      },
+      // Sin manualChunks: la forma de objeto arrastraba React al chunk de recharts y anulaba el lazy-loading.
+      // Rollup separa solo (recharts queda únicamente en los chunks de Estadísticas / Resultado).
     },
   };
 });

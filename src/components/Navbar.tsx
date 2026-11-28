@@ -1,10 +1,12 @@
 import React from 'react';
 import { useTypingStore } from '../store/useTypingStore';
+import { NavLink } from './NavLink';
+import type { RouteId } from '../seo/routes';
 import { Keyboard, BarChart2, Flame, Award, Volume2, VolumeX, Moon, Sun, User, Database, LogIn, Info } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'test' | 'stats' | 'adaptive' | 'about';
-  setCurrentTab: (tab: 'test' | 'stats' | 'adaptive' | 'about') => void;
+  onNavigate: (id: RouteId) => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
   onOpenAchievements: () => void;
@@ -13,7 +15,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
-  setCurrentTab,
+  onNavigate,
   darkMode,
   setDarkMode,
   onOpenAchievements,
@@ -23,27 +25,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isGuest = profile.id === 'guest' || profile.isGuest;
 
   return (
-    <header className="w-full max-w-6xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+    <header className="w-full max-w-6xl mx-auto px-6 py-6 flex flex-col min-[1160px]:flex-row items-center justify-between gap-4 select-none">
       {/* Logo & Brand */}
-      <div 
-        className="flex items-center gap-3 cursor-pointer group"
-        onClick={() => setCurrentTab('test')}
-      >
+      <NavLink to="test" onNavigate={onNavigate} className="flex items-center gap-3 group">
         <div className="w-10 h-10 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 flex items-center justify-center text-amber-600 dark:text-amber-400 group-hover:scale-105 transition-transform shadow-sm">
-          <Keyboard className="w-6 h-6" />
+          <Keyboard className="w-6 h-6" aria-hidden="true" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
-            TypeMaster <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400">PRO</span>
-          </h1>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Entrenamiento de mecanografía de alta precisión</p>
+          <p className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
+            TypeMaster <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">PRO</span>
+          </p>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">Entrenamiento de mecanografía de alta precisión</p>
         </div>
-      </div>
+      </NavLink>
 
       {/* Navigation Tabs */}
-      <nav className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-900 p-1.5 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs">
-        <button
-          onClick={() => setCurrentTab('test')}
+      <nav aria-label="Navegación principal" className="flex flex-wrap md:flex-nowrap md:shrink-0 justify-center items-center gap-1 max-w-full bg-neutral-100 dark:bg-neutral-900 p-1.5 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs">
+        <NavLink
+          to="test"
+          onNavigate={onNavigate}
+          active={currentTab === 'test'}
           className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
             currentTab === 'test'
               ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs'
@@ -52,9 +53,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Keyboard className="w-4 h-4" />
           Práctica
-        </button>
-        <button
-          onClick={() => setCurrentTab('stats')}
+        </NavLink>
+        <NavLink
+          to="stats"
+          onNavigate={onNavigate}
+          active={currentTab === 'stats'}
           className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
             currentTab === 'stats'
               ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs'
@@ -63,9 +66,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <BarChart2 className="w-4 h-4" />
           Estadísticas
-        </button>
-        <button
-          onClick={() => setCurrentTab('adaptive')}
+        </NavLink>
+        <NavLink
+          to="adaptive"
+          onNavigate={onNavigate}
+          active={currentTab === 'adaptive'}
           className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
             currentTab === 'adaptive'
               ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs'
@@ -74,9 +79,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Flame className="w-4 h-4 text-amber-500" />
           Adaptativo
-        </button>
-        <button
-          onClick={() => setCurrentTab('about')}
+        </NavLink>
+        <NavLink
+          to="about"
+          onNavigate={onNavigate}
+          active={currentTab === 'about'}
           className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
             currentTab === 'about'
               ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs'
@@ -85,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Info className="w-4 h-4" />
           Acerca de
-        </button>
+        </NavLink>
       </nav>
 
       {/* User Status, Auth & Quick Actions */}
@@ -95,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={onOpenAuth}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-semibold transition-all cursor-pointer shadow-xs ${
             isGuest
-              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
+              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30 ring-1 ring-amber-500/20'
               : 'bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-900 dark:text-white border-neutral-200 dark:border-neutral-800'
           }`}
           title={isGuest ? 'Iniciar sesión para guardar en Neon DB' : 'Ver perfil de usuario'}
