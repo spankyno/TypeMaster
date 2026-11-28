@@ -1,0 +1,7 @@
+# TypeMaster Pro — https://typemaster-chi.vercel.app/
+User-agent: *
+Allow: /
+# La API no tiene contenido indexable: evita gastar invocaciones serverless y compute de la base de datos.
+Disallow: /api/
+
+Sitemap: https://typemaster-chi.vercel.app/sitemap.xml
