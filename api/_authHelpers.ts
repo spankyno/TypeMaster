@@ -177,6 +177,11 @@ export function rateLimit(
   return { ok: true };
 }
 
+/** Borra un contador del limitador en memoria (p. ej. tras un login correcto). */
+export function rateLimitReset(key: string): void {
+  rateBuckets.delete(key);
+}
+
 /** Client IP best-effort for rate limiting */
 export function clientIp(req: any): string {
   const xf = req.headers?.['x-forwarded-for'] || req.headers?.['X-Forwarded-For'];

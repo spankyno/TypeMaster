@@ -21,6 +21,9 @@ export interface DbUserProfile {
   tokenVersion?: number;
 }
 
+/** Tope de tests guardados por usuario (se borran los más antiguos al superarlo). */
+export const MAX_TESTS_PER_USER = 5000;
+
 const today = () => new Date().toISOString().split('T')[0];
 
 // Fallback en memoria para desarrollo local cuando DATABASE_URL no está configurada
@@ -111,16 +114,20 @@ export async function saveUser(userId: string, p: CleanProfile): Promise<void> {
   `;
 }
 
+/** El listado NO incluye la serie PPM (solo se usa en la pantalla de resultado del test recién hecho). */
 export async function fetchTests(userId: string, limit = 200): Promise<DbTestRecord[]> {
   const sql = getDatabaseClient();
   if (!sql) {
-    return localMemoryDb.tests.filter((t) => t.userId === userId).slice(0, limit);
+    return localMemoryDb.tests
+      .filter((t) => t.userId === userId)
+      .slice(0, limit)
+      .map((t) => ({ ...t, wpmSeries: [] }));
   }
   const rows = await sql`
     SELECT id, user_id AS "userId", mode, sub_mode AS "subMode", wpm, raw_wpm AS "rawWpm", kpm, keystrokes,
            accuracy, consistency, chars_correct AS "charsCorrect", chars_wrong AS "charsWrong",
            chars_extra AS "charsExtra", chars_missed AS "charsMissed",
-           duration_seconds::float8 AS "durationSeconds", wpm_series AS "wpmSeries",
+           duration_seconds::float8 AS "durationSeconds", '[]'::jsonb AS "wpmSeries",
            created_at AS "createdAt"
     FROM tests
     WHERE user_id = ${userId}
@@ -164,6 +171,30 @@ export async function insertTests(userId: string, tests: CleanTest[]): Promise<n
     )
   );
   return results.reduce((acc, r) => acc + (r.length > 0 ? 1 : 0), 0);
+}
+
+/** Conserva solo los `keep` tests más recientes del usuario; devuelve cuántos borró. */
+export async function trimTests(userId: string, keep = MAX_TESTS_PER_USER): Promise<number> {
+  const sql = getDatabaseClient();
+  if (!sql) {
+    const mine = localMemoryDb.tests
+      .filter((t) => t.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const drop = new Set(mine.slice(keep).map((t) => t.id));
+    if (drop.size === 0) return 0;
+    localMemoryDb.tests = localMemoryDb.tests.filter((t) => !drop.has(t.id));
+    return drop.size;
+  }
+  const rows = await sql`
+    DELETE FROM tests
+    WHERE user_id = ${userId}
+      AND id IN (
+        SELECT id FROM tests WHERE user_id = ${userId}
+        ORDER BY created_at DESC OFFSET ${keep}::int
+      )
+    RETURNING id
+  `;
+  return rows.length;
 }
 
 /** Perfil público (sin hash de contraseña) */

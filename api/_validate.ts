@@ -37,7 +37,17 @@ export interface CleanProfile {
 }
 
 const MAX_WPM = 400; // el récord mundial ronda 300–350 PPM
-const MAX_SERIES = 7200;
+/** Máximo de puntos que se guardan por test (la serie se reduce por muestreo, no se trunca). */
+export const MAX_SERIES = 600;
+/** Tope duro de entrada antes de procesar (evita iterar sobre arrays enormes). */
+const MAX_SERIES_INPUT = 7200;
+
+function downsample(values: number[], max: number): number[] {
+  if (values.length <= max) return values;
+  const out: number[] = [];
+  for (let i = 0; i < max; i++) out.push(values[Math.floor((i * values.length) / max)]);
+  return out;
+}
 
 function num(v: unknown): number | null {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
@@ -74,10 +84,13 @@ export function sanitizeTest(raw: any, now: number = Date.now()): CleanTest | nu
   const subMode = String(subModeRaw ?? '').slice(0, 20);
   if (!subMode) return null;
 
-  const series = Array.isArray(raw.wpmSeries)
-    ? raw.wpmSeries
-        .slice(0, MAX_SERIES)
-        .map((v: unknown) => intInRange(v, 0, MAX_WPM + 100) ?? 0)
+  const series: number[] = Array.isArray(raw.wpmSeries)
+    ? downsample(
+        raw.wpmSeries
+          .slice(0, MAX_SERIES_INPUT)
+          .map((v: unknown) => intInRange(v, 0, MAX_WPM + 100) ?? 0),
+        MAX_SERIES
+      )
     : [];
 
   // KPM / pulsaciones: si el cliente es antiguo y no las envía, se estiman a partir del PPM bruto

@@ -97,7 +97,9 @@ interface TypingState {
   registerUser: (
     username: string,
     email: string,
-    password: string
+    password: string,
+    /** Campo trampa anti-bots: el formulario real lo envía siempre vacío */
+    website?: string
   ) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   checkDbConnection: () => Promise<void>;
@@ -148,13 +150,27 @@ const authJson = (token: string) => ({
   Authorization: `Bearer ${token}`,
 });
 
+/** El servidor acepta como máximo 20 tests por petición: se envían por tandas, en orden. */
+const UPLOAD_BATCH = 20;
+/** Tope del historial local (coincide con el tope por usuario del servidor). */
+const MAX_LOCAL_HISTORY = 5000;
+
 function uploadTests(token: string, tests: TestResult[]) {
   if (tests.length === 0) return;
-  fetch('/api/tests', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(tests),
-  }).catch(() => {});
+  void (async () => {
+    for (let i = 0; i < tests.length; i += UPLOAD_BATCH) {
+      try {
+        const res = await fetch('/api/tests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(tests.slice(i, i + UPLOAD_BATCH)),
+        });
+        if (!res.ok) return; // 401 / 429 / error: se reintentará en la siguiente sincronización
+      } catch {
+        return;
+      }
+    }
+  })();
 }
 
 export const useTypingStore = create<TypingState>((set, get) => {
@@ -334,10 +350,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
 
     checkDbConnection: async () => {
       try {
-        const res = await fetch('/api/health?deep=1');
+        // Comprobación superficial (no toca la BD, se cachea en el CDN). El estado real de la
+        // nube lo confirman las propias peticiones autenticadas de datos.
+        const res = await fetch('/api/health');
         if (res.ok) {
           const data = await res.json();
-          if (data?.database?.connected) {
+          if (data?.database?.configured) {
             set({ dbStatus: 'connected' });
             return;
           }
@@ -500,12 +518,12 @@ export const useTypingStore = create<TypingState>((set, get) => {
       }
     },
 
-    registerUser: async (username: string, email: string, password: string) => {
+    registerUser: async (username: string, email: string, password: string, website = '') => {
       try {
         const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'register', username, email, password }),
+          body: JSON.stringify({ action: 'register', username, email, password, website }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -1002,7 +1020,7 @@ export const useTypingStore = create<TypingState>((set, get) => {
         state.testHistory.length > 0 ? Math.max(...state.testHistory.map((t) => t.wpm)) : 0;
       const isPersonalBest = wpm > previousBestWpm && wpm > 0;
 
-      const newHistory = [result, ...state.testHistory];
+      const newHistory = [result, ...state.testHistory].slice(0, MAX_LOCAL_HISTORY);
       const xpEarned = computeXp(wpm, accuracy, state.charsCorrect);
       const newXp = state.profile.xp + xpEarned;
 

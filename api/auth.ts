@@ -18,31 +18,42 @@ import {
 } from './_authHelpers.js';
 import { prepareApi, parseBody, requireValidSession, serverError } from './_http.js';
 import { validateRegistration } from './_validate.js';
+import { rateLimitShared, rateLimitResetShared, keyPart } from './_rateLimit.js';
 
 const WINDOW = 15 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+
+/** Máx. de cuentas nuevas por hora en TODO el sitio (freno al registro masivo). Configurable por entorno. */
+const REGISTER_GLOBAL_PER_HOUR = Math.max(1, Number(process.env.REGISTER_GLOBAL_PER_HOUR) || 100);
+
+function tooMany(res: any, rl: { retryAfterSec?: number }, error: string) {
+  res.setHeader('Retry-After', String(rl.retryAfterSec || 60));
+  return res.status(429).json({ error, retryAfterSec: rl.retryAfterSec });
+}
 
 export default async function handler(req: any, res: any) {
   if (!prepareApi(req, res, ['GET', 'POST'])) return;
 
   try {
     const ip = clientIp(req);
-    const rl = rateLimit(`auth:${ip}`, 30, WINDOW);
-    if (!rl.ok) {
-      res.setHeader('Retry-After', String(rl.retryAfterSec || 60));
-      return res.status(429).json({
-        error: 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
-        retryAfterSec: rl.retryAfterSec,
-      });
-    }
 
     // --- Sesión actual ---
+    // La comprobación de sesión (GET) NO consume el cupo de intentos de login/registro:
+    // varios usuarios legítimos tras la misma IP (colegio, oficina) no se bloquean entre sí.
+    // Solo lleva un tope muy holgado en memoria contra bucles descontrolados.
     if (req.method === 'GET') {
+      const sessionRl = rateLimit(`auth-session:${ip}`, 600, WINDOW);
+      if (!sessionRl.ok) return tooMany(res, sessionRl, 'Demasiadas peticiones. Espera un momento.');
       const payload = await requireValidSession(req);
       if (!payload) return res.status(401).json({ error: 'No autenticado o sesión revocada' });
       const user = await fetchUser(payload.sub);
       if (!user) return res.status(401).json({ error: 'No autenticado o sesión revocada' });
       return res.status(200).json({ success: true, user: toPublicUser(user) });
     }
+
+    // Límite general de escrituras de autenticación por IP (compartido entre instancias)
+    const rl = await rateLimitShared(`auth:${ip}`, 40, WINDOW);
+    if (!rl.ok) return tooMany(res, rl, 'Demasiados intentos. Espera un momento e inténtalo de nuevo.');
 
     const body = await parseBody(req);
     const action = String(body?.action || 'login').toLowerCase();
@@ -61,13 +72,20 @@ export default async function handler(req: any, res: any) {
 
     // --- Registro ---
     if (action === 'register') {
+      // Campo trampa: el formulario real lo envía vacío; los bots que rellenan todo, no.
+      if (typeof body?.website === 'string' && body.website.trim() !== '') {
+        return res.status(400).json({ error: 'Solicitud no válida' });
+      }
+
       const v = validateRegistration(body);
       if (!v.ok) return res.status(400).json({ error: v.error });
 
-      const regRl = rateLimit(`auth-register:${ip}`, 5, WINDOW);
-      if (!regRl.ok) {
-        res.setHeader('Retry-After', String(regRl.retryAfterSec || 60));
-        return res.status(429).json({ error: 'Demasiados registros desde esta dirección. Inténtalo más tarde.' });
+      const regRl = await rateLimitShared(`auth-register:${ip}`, 5, HOUR);
+      if (!regRl.ok) return tooMany(res, regRl, 'Demasiados registros desde esta dirección. Inténtalo más tarde.');
+
+      const globalRl = await rateLimitShared('auth-register:global', REGISTER_GLOBAL_PER_HOUR, HOUR);
+      if (!globalRl.ok) {
+        return tooMany(res, globalRl, 'Hay demasiados registros ahora mismo. Inténtalo de nuevo en un rato.');
       }
 
       try {
@@ -91,10 +109,19 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Correo y contraseña son obligatorios' });
       }
 
-      const loginRl = rateLimit(`auth-login:${ip}:${email}`, 10, WINDOW);
+      // Dos límites compartidos entre instancias, ANTES del coste de PBKDF2:
+      //  - por IP + cuenta (10 / 15 min)
+      //  - por cuenta, sea cual sea la IP (20 / 15 min): frena la fuerza bruta distribuida
+      const emailKey = keyPart(email);
+      const loginKey = `auth-login:${ip}:${emailKey}`;
+      const acctKey = `auth-acct:${emailKey}`;
+      const loginRl = await rateLimitShared(loginKey, 10, WINDOW);
       if (!loginRl.ok) {
-        res.setHeader('Retry-After', String(loginRl.retryAfterSec || 60));
-        return res.status(429).json({ error: 'Demasiados intentos de inicio de sesión. Espera e inténtalo de nuevo.' });
+        return tooMany(res, loginRl, 'Demasiados intentos de inicio de sesión. Espera e inténtalo de nuevo.');
+      }
+      const acctRl = await rateLimitShared(acctKey, 20, WINDOW);
+      if (!acctRl.ok) {
+        return tooMany(res, acctRl, 'Demasiados intentos de inicio de sesión. Espera e inténtalo de nuevo.');
       }
 
       const row = await fetchUserByEmail(email);
@@ -103,6 +130,9 @@ export default async function handler(req: any, res: any) {
       if (!row || !row.passwordHash || !ok) {
         return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
       }
+
+      // Login correcto: se reinician los contadores para que un despiste no deje al usuario bloqueado
+      await rateLimitResetShared([loginKey, acctKey]);
 
       // Migración transparente a más iteraciones PBKDF2
       if (needsRehash(row.passwordHash)) {

@@ -10,41 +10,13 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <script>
-      // Aplica el tema antes del primer pintado (evita el parpadeo claro→oscuro)
-      try {
-        var d = localStorage.getItem('typemaster_darkmode');
-        if (d === null || d === 'true') document.documentElement.classList.add('dark');
-      } catch (e) {
-        document.documentElement.classList.add('dark');
-      }
-    </script>
+    <script src="/theme-init.js"></script>
     <!--seo:head:start--><!--seo:head:end-->
   </head>
   <body>
     <div id="root"></div>
     <!--seo:noscript:start--><!--seo:noscript:end-->
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Analítica propia (Cloudflare Worker). Se carga DESPUÉS del evento load y en un momento ocioso para no
-      // competir con el render (LCP/TBT), y no se carga para rastreadores (ahorra peticiones/cuota del Worker).
-      (function () {
-        if (/bot|crawl|spider|slurp|facebookexternalhit|preview|headless/i.test(navigator.userAgent)) return;
-        function load() {
-          var s = document.createElement('script');
-          s.src = 'https://aitors-hub-dashboard.asanchezgu.workers.dev/tracker.js';
-          s.async = true;
-          s.setAttribute('data-app', 'typemaster');
-          s.setAttribute('data-key', 'ak_2c249677f0a240cb986a541e11b8f0cb');
-          document.head.appendChild(s);
-        }
-        function whenIdle() {
-          if ('requestIdleCallback' in window) requestIdleCallback(load, { timeout: 4000 });
-          else setTimeout(load, 2000);
-        }
-        if (document.readyState === 'complete') whenIdle();
-        else window.addEventListener('load', whenIdle);
-      })();
-    </script>
+    <script src="/tracker-loader.js" defer></script>
   </body>
 </html>

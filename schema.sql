@@ -93,3 +93,12 @@ CREATE INDEX IF NOT EXISTS idx_key_stats_user ON key_stats(user_id);
 INSERT INTO users (id, username, email, xp, level, streak, max_streak, last_active_date, daily_goal_minutes, minutes_today)
 VALUES ('guest', 'Mecanógrafo Invitado', 'guest@typemaster.pro', 0, 1, 1, 1, CURRENT_DATE, 10, 0)
 ON CONFLICT (id) DO NOTHING;
+
+-- 5. Contadores de rate limit COMPARTIDOS entre instancias serverless
+--    (sustituye al contador en memoria, que en Vercel es independiente por instancia).
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key      TEXT PRIMARY KEY,
+  count    INTEGER NOT NULL DEFAULT 0,
+  reset_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
